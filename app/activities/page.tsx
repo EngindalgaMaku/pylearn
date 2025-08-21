@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Play, Lock, CheckCircle, Diamond, Zap, Clock, Trophy, Target, BookOpen } from "lucide-react"
+import { Play, Lock, CheckCircle, Diamond, Zap, Clock, Trophy, Target, BookOpen } from "lucide-react"
 import Link from "next/link"
+import { MobilePageHeader } from "@/components/mobile-page-header"
 
 const topics = [
   {
@@ -187,16 +188,11 @@ export default function ActivitiesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-card to-background">
+      {/* Mobile Header - standardized like Shop page */}
+      <MobilePageHeader title="Learning Activities" subtitle="Master Python through interactive challenges" />
+
       <div className="max-w-4xl mx-auto lg:max-w-6xl xl:max-w-7xl px-4 py-6 md:px-6 md:py-8 lg:px-8">
         <div className="mb-8 md:mb-12">
-          <div className="flex items-center gap-4 mb-6">
-            <Link href="/">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
-              </Button>
-            </Link>
-          </div>
 
           {/* Hero Section */}
           <div className="text-center mb-8">

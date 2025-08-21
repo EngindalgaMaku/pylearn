@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Calendar, Trophy, Target, Zap } from "lucide-react"
 import Link from "next/link"
+import { MobilePageHeader } from "@/components/mobile-page-header"
 
 const learningStats = {
   totalXP: 1250,
@@ -46,8 +47,11 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Header */}
-      <header className="bg-card border-b border-border px-4 py-6">
+      {/* Mobile Header - standardized like Shop page */}
+      <MobilePageHeader title="Your Progress" subtitle="Track your learning" />
+
+      {/* Desktop Header */}
+      <header className="bg-card border-b border-border px-4 py-6 hidden md:block">
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-3 mb-4">
             <Link href="/">

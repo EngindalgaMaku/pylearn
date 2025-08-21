@@ -6,6 +6,7 @@ import "./globals.css"
 import { Footer } from "@/components/footer"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import Providers from "./providers"
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -48,9 +49,14 @@ export default function RootLayout({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-8 lg:gap-12">
                 <Link href="/" className="flex items-center gap-3">
+                  <img
+                    src="/python.svg"
+                    alt="PyLearn logo"
+                    className="h-7 w-7 lg:h-8 lg:w-8"
+                  />
                   <div className="flex flex-col">
                     <span className="text-xl lg:text-2xl font-bold text-primary font-[family-name:var(--font-work-sans)]">
-                      PyLearn 🐍
+                      PyLearn
                     </span>
                     <span className="text-xs lg:text-sm text-muted-foreground -mt-1">
                       Master Python through fun and games
@@ -85,19 +91,15 @@ export default function RootLayout({
                   </Link>
                 </div>
               </div>
-              <Link href="/profile">
-                <Button variant="outline" size="sm" className="flex items-center gap-2 bg-transparent lg:px-4">
-                  <span className="text-sm lg:text-base">👤</span>
-                  <span className="lg:text-base">Profile</span>
-                </Button>
-              </Link>
             </div>
           </div>
         </nav>
 
         {/* Main content with offsets for fixed navs */}
         <main className="flex-1 md:pt-20 lg:pt-24 pb-24 md:pb-0">
-          {children}
+          <Providers>
+            {children}
+          </Providers>
         </main>
 
         {/* Mobile bottom nav */}
@@ -106,7 +108,11 @@ export default function RootLayout({
             <div className="flex justify-around">
               <Link href="/">
                 <Button variant="ghost" size="sm" className="flex-col gap-1 h-auto py-2 px-2">
-                  <span className="text-lg">🏠</span>
+                  <img
+                    src="/python.svg"
+                    alt="Home"
+                    className="h-6 w-6"
+                  />
                   <span className="text-xs">Home</span>
                 </Button>
               </Link>
@@ -132,12 +138,6 @@ export default function RootLayout({
                 <Button variant="ghost" size="sm" className="flex-col gap-1 h-auto py-2 px-2">
                   <span className="text-lg">⚡</span>
                   <span className="text-xs">Challenges</span>
-                </Button>
-              </Link>
-              <Link href="/profile">
-                <Button variant="ghost" size="sm" className="flex-col gap-1 h-auto py-2 px-2">
-                  <span className="text-lg">👤</span>
-                  <span className="text-xs">Profile</span>
                 </Button>
               </Link>
             </div>

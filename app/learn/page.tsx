@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import Link from "next/link"
 import { CheckCircle, Lock, Play, Trophy, Diamond } from "lucide-react"
+import { MobilePageHeader } from "@/components/mobile-page-header"
 
 const lessons = [
   {
@@ -103,6 +104,8 @@ export default function LearnPage() {
 
   return (
     <div className="min-h-screen bg-background">
+
+      <MobilePageHeader title="Learn" subtitle="Browse Python lessons" />
 
       <main className="max-w-md mx-auto md:max-w-4xl lg:max-w-5xl xl:max-w-6xl px-4 py-8 space-y-8">
         {/* Progress Overview */}

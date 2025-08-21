@@ -2,8 +2,8 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { MobilePageHeader } from "@/components/mobile-page-header"
 
 const games = [
   {
@@ -38,20 +38,8 @@ const games = [
 export default function GamesPage() {
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border px-4 py-6">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center gap-3 mb-2">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
-            <h1 className="text-xl font-bold font-[family-name:var(--font-work-sans)]">Learning Games</h1>
-          </div>
-          <p className="text-muted-foreground text-sm">Learn Python through fun interactive games</p>
-        </div>
-      </header>
+      {/* Mobile Header (standardized like Shop page) */}
+      <MobilePageHeader title="Learning Games" subtitle="Learn Python through fun interactive games" />
 
       {/* Main Content */}
       <main className="max-w-md mx-auto px-4 py-6 space-y-6">

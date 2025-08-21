@@ -76,7 +76,7 @@ export default function PythonTipWidget({ tip }: PythonTipWidgetProps) {
             variant="outline"
             size="sm"
             onClick={() => setShowCode(!showCode)}
-            className="w-full border-slate-600 text-slate-300 hover:bg-slate-700"
+            className="w-full border-slate-300 bg-white text-slate-900 hover:bg-slate-100 font-semibold"
           >
             <Code className="h-4 w-4 mr-2" />
             {showCode ? "Hide Code" : "Show Code Example"}

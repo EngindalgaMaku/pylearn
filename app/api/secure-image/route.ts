@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import path from "path"
 import { existsSync } from "fs"
 import { readFile } from "fs/promises"
-import prisma from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { verifyImageToken } from "@/lib/imageToken"
 
 function normalizePublicPath(p?: string | null): string | null {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import prisma from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { generateImageToken } from "@/lib/imageToken"
 
 // Map incoming category to accepted values matching anime-card-manager rules
