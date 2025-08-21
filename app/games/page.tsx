@@ -1,128 +1,244 @@
-"use client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import type { Metadata } from "next"
+import { headers } from "next/headers"
 import Link from "next/link"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { MobilePageHeader } from "@/components/mobile-page-header"
 
-const games = [
+type Game = {
+  id: string
+  title: string
+  description: string
+  difficulty: "Beginner" | "Intermediate" | "Advanced"
+  icon: string
+  timeEstimate: string
+  xpReward: number
+  keywords?: string[]
+}
+
+const GAMES: Game[] = [
   {
     id: "code-match",
     title: "Code Match",
-    description: "Match Python code with its output",
+    description: "Match Python code with its output. Faster than a print statement!",
     difficulty: "Beginner",
     icon: "🧩",
     timeEstimate: "3 min",
     xpReward: 50,
+    keywords: ["python", "match code", "output", "beginners"],
   },
   {
     id: "syntax-puzzle",
     title: "Syntax Puzzle",
-    description: "Arrange code blocks in the correct order",
+    description: "Arrange code blocks in the right order. Indentation party! 🎉",
     difficulty: "Beginner",
     icon: "🔧",
     timeEstimate: "5 min",
     xpReward: 75,
+    keywords: ["python syntax", "puzzle", "blocks", "order"],
   },
   {
     id: "variable-naming",
     title: "Variable Detective",
-    description: "Find valid Python variable names",
+    description: "Find valid Python variable names. No spaces, no drama.",
     difficulty: "Beginner",
     icon: "🕵️",
     timeEstimate: "4 min",
     xpReward: 60,
+    keywords: ["variables", "naming rules", "identifiers"],
   },
 ]
 
-export default function GamesPage() {
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Mobile Header (standardized like Shop page) */}
-      <MobilePageHeader title="Learning Games" subtitle="Learn Python through fun interactive games" />
+export async function generateMetadata(): Promise<Metadata> {
+  const hs = await headers()
+  const proto = hs.get("x-forwarded-proto") || "http"
+  const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000"
+  const origin = `${proto}://${host}`
+  const canonical = `${origin}/games`
 
-      {/* Main Content */}
-      <main className="max-w-md mx-auto px-4 py-6 space-y-6">
-        {/* Featured Game */}
-        <Card className="bg-gradient-to-br from-primary/10 to-secondary/10 border-primary/20">
+  const title = "Python Learning Games | Fun Mini-Games to Learn Python | PyLearn"
+  const description =
+    "Play fun, fast Python mini‑games: Code Match, Syntax Puzzle and more. Learn Python the playful way and earn XP along the way."
+
+  const keywords = [
+    "python games",
+    "learn python by playing",
+    "python mini games",
+    "code games",
+    "syntax puzzle",
+    "code match",
+    "variable naming game",
+  ]
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    robots: { index: true, follow: true },
+    keywords,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      url: canonical,
+      siteName: "PyLearn",
+      images: ["/icon.png"],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/icon.png"],
+    },
+  }
+}
+
+export default async function GamesPage() {
+  // Build absolute origin for structured data
+  const hs = await headers()
+  const proto = hs.get("x-forwarded-proto") || "http"
+  const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000"
+  const origin = `${proto}://${host}`
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement: GAMES.map((g, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      url: `${origin}/games/${g.id}`,
+      name: g.title,
+      description: g.description,
+      keywords: g.keywords || [],
+    })),
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-card to-background">
+      {/* Mobile Header (consistent app header) */}
+      <div className="md:hidden">
+        <MobilePageHeader
+          title="Python Learning Games"
+          subtitle="Play quick mini‑games and level up your Python"
+          backHref="/"
+        />
+      </div>
+
+      <div className="max-w-4xl mx-auto lg:max-w-6xl xl:max-w-7xl px-4 py-6 md:px-6 md:py-10 lg:px-8">
+        {/* SEO: JSON-LD */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+
+        {/* Desktop Hero */}
+        <div className="hidden md:block mb-8 md:mb-12">
+          <div className="text-center space-y-4">
+            <div className="text-5xl lg:text-6xl select-none">🐍🎮✨</div>
+            <h1 className="font-serif font-black text-4xl md:text-5xl lg:text-6xl text-foreground">
+              Play Python Learning Games
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+              Quick, fun mini‑games that sharpen your Python skills.
+              Learn by playing — earn XP, unlock wins, and have a laugh or two.
+            </p>
+          </div>
+        </div>
+
+        {/* About / Fun blurb */}
+        <Card className="mb-8 bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 border-primary/20">
           <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">🎯</span>
-              </div>
-              <div>
-                <CardTitle className="font-[family-name:var(--font-work-sans)]">Daily Challenge</CardTitle>
-                <CardDescription>Complete today's special challenge</CardDescription>
-              </div>
-            </div>
+            <CardTitle className="font-serif">Why games?</CardTitle>
+            <CardDescription>
+              Because typing print statements a thousand times is so 2010. These mini‑games train your brain
+              on the essentials — fast feedback, tiny wins, zero boredom.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div className="flex gap-2">
-                <Badge variant="secondary">+100 XP</Badge>
-                <Badge variant="outline">Bonus Reward</Badge>
-              </div>
-              <Button size="sm">Play Now</Button>
+          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="bg-card/60 border border-border rounded-lg p-3">
+              <div className="text-2xl mb-1">⚡</div>
+              <div className="font-semibold">Short & Sweet</div>
+              <div className="text-muted-foreground">Play in minutes. Learn for a lifetime.</div>
+            </div>
+            <div className="bg-card/60 border border-border rounded-lg p-3">
+              <div className="text-2xl mb-1">🧠</div>
+              <div className="font-semibold">Real Muscle Memory</div>
+              <div className="text-muted-foreground">Practice syntax, reading, and problem sense.</div>
+            </div>
+            <div className="bg-card/60 border border-border rounded-lg p-3">
+              <div className="text-2xl mb-1">🎯</div>
+              <div className="font-semibold">XP Rewards</div>
+              <div className="text-muted-foreground">Beat levels, earn XP, flex on leaderboards.</div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Games List */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold font-[family-name:var(--font-work-sans)]">Available Games</h2>
-
-          {games.map((game) => (
-            <Card key={game.id} className="cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">{game.icon}</span>
+        {/* Games Grid */}
+        <div className="mb-8">
+          <h2 className="text-xl md:text-2xl font-serif font-bold text-foreground mb-4 md:mb-6">
+            Choose a Game
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {GAMES.map((game) => (
+              <Card
+                key={game.id}
+                className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border-border/50 bg-card/80 backdrop-blur-sm"
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                        <span className="text-2xl">{game.icon}</span>
+                      </div>
+                      <div>
+                        <CardTitle className="font-serif font-bold text-lg text-foreground">
+                          {game.title}
+                        </CardTitle>
+                        <CardDescription className="text-muted-foreground">
+                          {game.description}
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium font-[family-name:var(--font-work-sans)]">{game.title}</h3>
-                      <p className="text-sm text-muted-foreground">{game.description}</p>
-                    </div>
+                    <Badge variant="outline">{game.difficulty}</Badge>
                   </div>
-                  <Badge variant="outline">{game.difficulty}</Badge>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-4 text-sm text-muted-foreground">
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
                     <span>{game.timeEstimate}</span>
                     <span>+{game.xpReward} XP</span>
                   </div>
                   <Link href={`/games/${game.id}`}>
-                    <Button size="sm">Play</Button>
+                    <Button className="w-full">Play</Button>
                   </Link>
-                </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Friendly FAQ */}
+        <div className="mb-4 md:mb-8">
+          <h2 className="text-xl md:text-2xl font-serif font-bold text-foreground mb-3 md:mb-4">
+            Frequently Un‑asked Questions
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Are these games hard?</CardTitle>
+              </CardHeader>
+              <CardContent className="text-muted-foreground">
+                Only if you try to name a variable with spaces. Start easy, level up fast.
               </CardContent>
             </Card>
-          ))}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Will I actually learn Python?</CardTitle>
+              </CardHeader>
+              <CardContent className="text-muted-foreground">
+                Yes. Tiny focused challenges build real fluency — without the yawns.
+              </CardContent>
+            </Card>
+          </div>
         </div>
-
-        {/* Coming Soon */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold font-[family-name:var(--font-work-sans)]">Coming Soon</h2>
-
-          <Card className="opacity-60">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">🏃</span>
-                  </div>
-                  <div>
-                    <h3 className="font-medium">Code Runner</h3>
-                    <p className="text-sm text-muted-foreground">Race against time to fix code bugs</p>
-                  </div>
-                </div>
-                <Badge variant="secondary">Soon</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
+      </div>
     </div>
   )
 }

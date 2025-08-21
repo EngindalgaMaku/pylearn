@@ -1,378 +1,256 @@
-"use client"
+import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import ActivitiesClient, { type ActivityDTO } from "@/components/activities/ActivitiesClient";
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Play, Lock, CheckCircle, Diamond, Zap, Clock, Trophy, Target, BookOpen } from "lucide-react"
-import Link from "next/link"
-import { MobilePageHeader } from "@/components/mobile-page-header"
+export async function generateMetadata(
+  { searchParams }: { searchParams?: Record<string, string | string[]> }
+): Promise<Metadata> {
+  const hs = await headers();
+  const proto = hs.get("x-forwarded-proto") || "http";
+  const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000";
+  const origin = `${proto}://${host}`;
 
-const topics = [
-  {
-    id: "basics",
-    title: "Python Basics",
-    description: "Master the fundamentals of Python programming",
-    progress: 75,
-    totalActivities: 8,
-    completedActivities: 6,
-    color: "bg-blue-500",
-  },
-  {
-    id: "data-structures",
-    title: "Data Structures",
-    description: "Learn lists, dictionaries, and advanced collections",
-    progress: 40,
-    totalActivities: 6,
-    completedActivities: 2,
-    color: "bg-green-500",
-  },
-  {
-    id: "algorithms",
-    title: "Algorithms",
-    description: "Explore sorting, searching, and graph algorithms",
-    progress: 20,
-    totalActivities: 4,
-    completedActivities: 1,
-    color: "bg-purple-500",
-  },
-  {
-    id: "functions-oop",
-    title: "Functions & OOP",
-    description: "Advanced programming concepts and patterns",
-    progress: 0,
-    totalActivities: 2,
-    completedActivities: 0,
-    color: "bg-orange-500",
-  },
-]
+  const spAny = searchParams ?? {};
+ const getParam = (key: string): string | undefined => {
+   const v = (spAny as Record<string, unknown>)[key];
+   if (Array.isArray(v)) return v[0] as string;
+   if (typeof v === "string") return v;
+   return undefined;
+ };
 
-const activities = [
-  {
-    id: "variables-intro",
-    title: "Python Variables & Data Types",
-    description: "Interactive demo of Python variables and basic data types",
-    activityType: "Interactive Demo",
-    category: "basics",
-    difficulty: 1,
-    diamondReward: 25,
-    experienceReward: 50,
-    estimatedMinutes: 12,
-    isLocked: false,
-    isCompleted: true,
-    tags: ["variables", "data-types", "basics"],
-  },
-  {
-    id: "builtin-functions",
-    title: "Built-in Functions Explorer",
-    description: "Hands-on practice with Python's essential built-in functions",
-    activityType: "Coding Lab",
-    category: "basics",
-    difficulty: 2,
-    diamondReward: 35,
-    experienceReward: 70,
-    estimatedMinutes: 18,
-    isLocked: false,
-    isCompleted: true,
-    tags: ["functions", "built-ins", "practice"],
-  },
-  {
-    id: "string-methods",
-    title: "String Methods Matching",
-    description: "Match string methods with their correct outputs and use cases",
-    activityType: "Matching Game",
-    category: "basics",
-    difficulty: 2,
-    diamondReward: 30,
-    experienceReward: 60,
-    estimatedMinutes: 15,
-    isLocked: false,
-    isCompleted: true,
-    tags: ["strings", "methods", "matching"],
-  },
-  {
-    id: "control-structures",
-    title: "Control Flow Code Builder",
-    description: "Build complete programs using loops and conditional statements",
-    activityType: "Code Builder",
-    category: "basics",
-    difficulty: 3,
-    diamondReward: 45,
-    experienceReward: 90,
-    estimatedMinutes: 25,
-    isLocked: false,
-    isCompleted: true,
-    tags: ["loops", "conditionals", "control-flow"],
-  },
-  {
-    id: "list-operations",
-    title: "List Operations Lab",
-    description: "Master list creation, modification, and advanced operations",
-    activityType: "Coding Lab",
-    category: "data-structures",
-    difficulty: 2,
-    diamondReward: 40,
-    experienceReward: 80,
-    estimatedMinutes: 20,
-    isLocked: false,
-    isCompleted: true,
-    tags: ["lists", "operations", "data-structures"],
-  },
-  {
-    id: "dict-exploration",
-    title: "Dictionary Data Explorer",
-    description: "Explore and manipulate real-world data using Python dictionaries",
-    activityType: "Data Exploration",
-    category: "data-structures",
-    difficulty: 3,
-    diamondReward: 50,
-    experienceReward: 100,
-    estimatedMinutes: 30,
-    isLocked: false,
-    isCompleted: true,
-    tags: ["dictionaries", "data", "exploration"],
-  },
-  {
-    id: "binary-search",
-    title: "Binary Search Visualizer",
-    description: "Interactive visualization of the binary search algorithm",
-    activityType: "Algorithm Visualization",
-    category: "algorithms",
-    difficulty: 4,
-    diamondReward: 55,
-    experienceReward: 110,
-    estimatedMinutes: 28,
-    isLocked: false,
-    isCompleted: true,
-    tags: ["binary-search", "algorithms", "visualization"],
-  },
-  {
-    id: "sorting-comparison",
-    title: "Sorting Algorithms Showdown",
-    description: "Compare and contrast different sorting algorithms with live demos",
-    activityType: "Interactive Demo",
-    category: "algorithms",
-    difficulty: 4,
-    diamondReward: 60,
-    experienceReward: 120,
-    estimatedMinutes: 35,
-    isLocked: true,
-    isCompleted: false,
-    tags: ["sorting", "algorithms", "comparison"],
-  },
-]
+ const categoryParam = getParam("category");
+ const typeParam = getParam("type");
+ const pageNum = parseInt(getParam("page") || "1", 10);
+ const page = Number.isFinite(pageNum) && pageNum > 0 ? pageNum : 1;
 
-const activityTypeColors = {
-  "Interactive Demo": "bg-blue-100 text-blue-800",
-  "Coding Lab": "bg-green-100 text-green-800",
-  "Matching Game": "bg-purple-100 text-purple-800",
-  "Code Builder": "bg-orange-100 text-orange-800",
-  "Data Exploration": "bg-teal-100 text-teal-800",
-  "Algorithm Visualization": "bg-red-100 text-red-800",
+ const selectedCategory = (categoryParam && categoryParam.trim()) || "Python Fundamentals";
+ const selectedActivityType = typeParam && typeParam.trim() ? typeParam : undefined;
+
+ const titleize = (s?: string) =>
+   String(s ?? "")
+     .split(/[_\s]+/)
+     .filter(Boolean)
+     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+     .join(" ");
+
+ const titleParts = ["Learning Activities"];
+ if (selectedCategory) titleParts.push(selectedCategory);
+ if (selectedActivityType) titleParts.push(titleize(selectedActivityType));
+ if (page > 1) titleParts.push(`Page ${page}`);
+ const title = titleParts.join(" | ");
+
+ const descriptionBase = "Master Python through interactive challenges and activities.";
+ const description = [
+   descriptionBase,
+   selectedCategory ? `Category: ${selectedCategory}.` : "",
+   selectedActivityType ? `Type: ${titleize(selectedActivityType)}.` : "",
+   page > 1 ? `Page ${page}.` : "",
+ ]
+   .filter(Boolean)
+   .join(" ");
+
+ const params = new URLSearchParams();
+ if (selectedCategory) params.set("category", selectedCategory);
+ if (selectedActivityType) params.set("type", selectedActivityType);
+ if (page > 1) params.set("page", String(page));
+ const pathOnly = params.toString() ? `/activities?${params.toString()}` : "/activities";
+ const canonical = `${origin}${pathOnly}`;
+
+ return {
+   title,
+   description,
+   alternates: { canonical },
+   robots: { index: true, follow: true },
+   openGraph: {
+     title,
+     description,
+     type: "website",
+     url: canonical,
+   },
+   twitter: {
+     card: "summary_large_image",
+     title,
+     description,
+   },
+   keywords: [
+     "Python",
+     "Learning",
+     "Activities",
+     selectedCategory,
+     selectedActivityType ? titleize(selectedActivityType) : undefined,
+   ].filter(Boolean) as string[],
+ };
 }
 
-const difficultyLabels = ["", "Beginner", "Basic", "Intermediate", "Advanced", "Expert"]
-const difficultyColors = ["", "bg-green-500", "bg-blue-500", "bg-yellow-500", "bg-orange-500", "bg-red-500"]
+function toArraySafe(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v) => typeof v === "string") as string[];
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? (parsed.filter((v) => typeof v === "string") as string[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
-export default function ActivitiesPage() {
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+function normalizeType(activityType: string | null | undefined): string {
+  if (!activityType) return "lesson";
+  return activityType;
+}
 
-  const filteredActivities = selectedTopic
-    ? activities.filter((activity) => activity.category === selectedTopic)
-    : activities
+export default async function ActivitiesPage(props: { searchParams: any }) {
+  // Next 14 passes a plain object; Next 15 may pass a Promise-like.
+  const spAny = props?.searchParams as any
+  const sp = spAny && typeof spAny.then === "function" ? await spAny : (spAny ?? {})
+  // Fixed page size per request: always show 10 activities per page
+  const pageSize = 10;
 
-  const totalActivities = activities.length
-  const completedActivities = activities.filter((a) => a.isCompleted).length
-  const overallProgress = Math.round((completedActivities / totalActivities) * 100)
+  // Helpers to read query params
+  const getParam = (key: string): string | undefined => {
+    const v = (sp as Record<string, unknown>)?.[key]
+    if (Array.isArray(v)) return v[0] as string
+    if (typeof v === "string") return v
+    return undefined
+  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-card to-background">
-      {/* Mobile Header - standardized like Shop page */}
-      <MobilePageHeader title="Learning Activities" subtitle="Master Python through interactive challenges" />
+  const categoryParam = getParam("category");
+  const typeParam = getParam("type");
+  const pageNum = parseInt(getParam("page") || "1", 10);
+  const page = Number.isFinite(pageNum) && pageNum > 0 ? pageNum : 1;
 
-      <div className="max-w-4xl mx-auto lg:max-w-6xl xl:max-w-7xl px-4 py-6 md:px-6 md:py-8 lg:px-8">
-        <div className="mb-8 md:mb-12">
+  // Default to Python Fundamentals category if not provided
+  const selectedCategory = (categoryParam && categoryParam.trim()) || "Python Fundamentals";
+  const selectedActivityType = typeParam && typeParam.trim() ? typeParam : undefined;
 
-          {/* Hero Section */}
-          <div className="text-center mb-8">
-            <h1 className="font-serif font-black text-4xl md:text-5xl lg:text-6xl text-foreground mb-4">
-              Learning Activities
-            </h1>
-            <p className="text-lg md:text-xl text-muted-foreground mb-6 max-w-2xl mx-auto">
-              Master Python through interactive experiences and hands-on challenges
-            </p>
+  // Build category candidates with alias support (merge 'python_fundamentals' etc. into 'Python Fundamentals')
+  const normalizedCat = (selectedCategory || "").toLowerCase().replace(/[_\-]+/g, " ").trim();
+  const PF_ALIASES = ["Python Fundamentals", "python fundamentals", "python_fundamentals", "python-fundamentals", "py fundamentals", "fundamentals"];
+  const isPF = normalizedCat === "python fundamentals" || PF_ALIASES.map((a) => a.toLowerCase()).includes(normalizedCat);
+  const categoryCandidates = selectedCategory ? (isPF ? PF_ALIASES : [selectedCategory]) : [];
 
-            {/* Overall Progress Card */}
-            <Card className="max-w-md mx-auto bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-center gap-4 mb-4">
-                  <Trophy className="w-8 h-8 text-primary" />
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-foreground">{overallProgress}%</div>
-                    <div className="text-sm text-muted-foreground">Overall Progress</div>
-                  </div>
-                  <Target className="w-8 h-8 text-accent" />
-                </div>
-                <Progress value={overallProgress} className="h-3 mb-2" />
-                <div className="text-sm text-muted-foreground">
-                  {completedActivities} of {totalActivities} activities completed
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+  // Where clause (exclude lessons per requirement)
+  const where = {
+    isActive: true,
+    NOT: { activityType: "lesson" as const },
+    ...(categoryCandidates.length
+      ? {
+          OR: categoryCandidates.map((c) => ({
+            category: { equals: c, mode: "insensitive" as const },
+          })),
+        }
+      : {}),
+    ...(selectedActivityType
+      ? { activityType: { equals: selectedActivityType, mode: "insensitive" as const } }
+      : {}),
+  };
 
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-6">
-            <BookOpen className="w-5 h-5 text-primary" />
-            <h2 className="font-serif font-bold text-xl md:text-2xl text-foreground">Choose Your Path</h2>
-          </div>
+  // Parallel queries: total count, page data, distinct categories, distinct activity types
+  const [total, rows, categoriesDistinct, activityTypesDistinct] = await Promise.all([
+    prisma.learningActivity.count({ where }),
+    prisma.learningActivity.findMany({
+      where,
+      orderBy: [
+        { sortOrder: "asc" as const },
+        { createdAt: "desc" as const },
+      ],
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        activityType: true,
+        category: true,
+        difficulty: true,
+        diamondReward: true,
+        experienceReward: true,
+        estimatedMinutes: true,
+        isLocked: true,
+        tags: true,
+      },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.learningActivity.findMany({
+      where: {
+        isActive: true,
+        NOT: { activityType: "lesson" as const },
+      },
+      select: { category: true },
+      distinct: ["category"],
+    }),
+    prisma.learningActivity.findMany({
+      where: {
+        isActive: true,
+        NOT: { activityType: "lesson" as const },
+      },
+      select: { activityType: true },
+      distinct: ["activityType"],
+    }),
+  ]);
 
-          <div className="flex flex-wrap gap-3 mb-6">
-            <Button
-              variant={selectedTopic === null ? "default" : "outline"}
-              onClick={() => setSelectedTopic(null)}
-              className="font-medium"
-            >
-              All Topics
-            </Button>
-            {topics.map((topic) => (
-              <Button
-                key={topic.id}
-                variant={selectedTopic === topic.id ? "default" : "outline"}
-                onClick={() => setSelectedTopic(topic.id)}
-                className="font-medium"
-              >
-                {topic.title}
-              </Button>
-            ))}
-          </div>
+  const activities: ActivityDTO[] = rows.map((a) => ({
+    id: a.id,
+    slug: a.slug ?? a.id,
+    title: a.title,
+    description: a.description ?? "",
+    activityType: normalizeType(a.activityType),
+    category: a.category ?? "General",
+    difficulty: Math.max(1, Math.min(5, Number(a.difficulty ?? 1))),
+    diamondReward: Number(a.diamondReward ?? 0),
+    experienceReward: Number(a.experienceReward ?? 0),
+    estimatedMinutes: Number(a.estimatedMinutes ?? 5),
+    isLocked: false,
+    isCompleted: false,
+    tags: toArraySafe(a.tags as unknown),
+  }));
 
-          {selectedTopic === null && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {topics.map((topic) => (
-                <Card
-                  key={topic.id}
-                  className="hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border-border/50"
-                >
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className={`w-4 h-4 rounded-full ${topic.color} shadow-lg`} />
-                      <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
-                        {topic.completedActivities}/{topic.totalActivities}
-                      </Badge>
-                    </div>
-                    <CardTitle className="font-serif font-bold text-lg text-foreground">{topic.title}</CardTitle>
-                    <CardDescription className="text-muted-foreground">{topic.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm font-medium">
-                        <span className="text-muted-foreground">Progress</span>
-                        <span className="text-primary">{topic.progress}%</span>
-                      </div>
-                      <Progress value={topic.progress} className="h-2" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+  const categories = categoriesDistinct
+    .map((c) => c.category)
+    .filter((v): v is string => typeof v === "string");
 
-        <div className="mb-6">
-          <h2 className="font-serif font-bold text-xl md:text-2xl text-foreground mb-6">
-            {selectedTopic ? `${topics.find((t) => t.id === selectedTopic)?.title} Activities` : "All Activities"}
-          </h2>
-        </div>
+  const activityTypes = activityTypesDistinct
+    .map((t) => t.activityType)
+    .filter((v): v is string => typeof v === "string");
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredActivities.map((activity) => (
-            <Card
-              key={activity.id}
-              className={`hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
-                activity.isLocked ? "opacity-60" : ""
-              } border-border/50 bg-card/80 backdrop-blur-sm`}
-            >
-              <CardHeader className="pb-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <Badge
-                        className={`${activityTypeColors[activity.activityType as keyof typeof activityTypeColors]} font-medium`}
-                      >
-                        {activity.activityType}
-                      </Badge>
-                      <Badge className={`${difficultyColors[activity.difficulty]} text-white font-medium`}>
-                        {difficultyLabels[activity.difficulty]}
-                      </Badge>
-                    </div>
-                    <CardTitle className="font-serif font-bold text-lg flex items-center gap-2 text-foreground">
-                      {activity.title}
-                      {activity.isCompleted && <CheckCircle className="w-5 h-5 text-green-500" />}
-                      {activity.isLocked && <Lock className="w-5 h-5 text-muted-foreground" />}
-                    </CardTitle>
-                    <CardDescription className="mt-2 text-muted-foreground leading-relaxed">
-                      {activity.description}
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1 text-blue-600">
-                          <Diamond className="w-4 h-4" />
-                          <span className="font-medium">{activity.diamondReward}</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-primary">
-                          <Zap className="w-4 h-4" />
-                          <span className="font-medium">{activity.experienceReward} XP</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Clock className="w-4 h-4" />
-                          <span className="font-medium">{activity.estimatedMinutes}m</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+  // Absolute origin for structured data URLs
+  const hs2 = await headers();
+  const proto2 = hs2.get("x-forwarded-proto") || "http";
+  const host2 = hs2.get("x-forwarded-host") || hs2.get("host") || "localhost:3000";
+  const origin2 = `${proto2}://${host2}`;
 
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-1">
-                    {activity.tags.map((tag) => (
-                      <Badge key={tag} variant="outline" className="text-xs border-border/50">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  <Button
-                    className="w-full font-medium shadow-sm"
-                    disabled={activity.isLocked}
-                    asChild={!activity.isLocked}
-                    variant={activity.isCompleted ? "outline" : "default"}
-                  >
-                    {activity.isLocked ? (
-                      <>
-                        <Lock className="w-4 h-4 mr-2" />
-                        Locked
-                      </>
-                    ) : (
-                      <Link href={`/activities/${activity.id}`}>
-                        <Play className="w-4 h-4 mr-2" />
-                        {activity.isCompleted ? "Play Again" : "Start Activity"}
-                      </Link>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
+ return (
+   <>
+     <script
+       type="application/ld+json"
+       suppressHydrationWarning
+       dangerouslySetInnerHTML={{
+         __html: JSON.stringify({
+           "@context": "https://schema.org",
+           "@type": "ItemList",
+           itemListOrder: "http://schema.org/ItemListOrderAscending",
+           numberOfItems: activities.length,
+           itemListElement: activities.map((a, i) => ({
+             "@type": "ListItem",
+             position: (page - 1) * pageSize + i + 1,
+             url: `${origin2}/activities/${a.slug ?? a.id}`,
+             name: a.title,
+           })),
+         }),
+       }}
+     />
+     <ActivitiesClient
+       activities={activities}
+       total={total}
+       page={page}
+       pageSize={pageSize}
+       categories={categories}
+       activityTypes={activityTypes}
+       selectedCategory={selectedCategory}
+       selectedActivityType={selectedActivityType ?? null}
+     />
+   </>
+ );
 }

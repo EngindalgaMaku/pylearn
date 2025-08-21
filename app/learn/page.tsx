@@ -1,246 +1,286 @@
-"use client"
-
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import Link from "next/link"
-import { CheckCircle, Lock, Play, Trophy, Diamond } from "lucide-react"
 import { MobilePageHeader } from "@/components/mobile-page-header"
+import LearnGrid, { type LearnActivity } from "@/components/learn/learn-grid"
+import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { headers } from "next/headers"
+import type { Metadata } from "next"
 
-const lessons = [
-  {
-    id: 1,
-    title: "Variables and Data Types",
-    description: "Learn about Python variables, strings, numbers, and booleans",
-    category: "Python Basics",
-    difficulty: "Beginner",
-    duration: "15 min",
-    xpReward: 50,
-    diamondReward: 10,
-    completed: true,
-    locked: false,
-    icon: "🔤",
-  },
-  {
-    id: 2,
-    title: "Working with Strings",
-    description: "String manipulation, formatting, and common methods",
-    category: "Python Basics",
-    difficulty: "Beginner",
-    duration: "20 min",
-    xpReward: 60,
-    diamondReward: 12,
-    completed: true,
-    locked: false,
-    icon: "📝",
-  },
-  {
-    id: 3,
-    title: "Lists and Indexing",
-    description: "Creating lists, accessing elements, and list methods",
-    category: "Data Structures",
-    difficulty: "Beginner",
-    duration: "25 min",
-    xpReward: 70,
-    diamondReward: 15,
-    completed: false,
-    locked: false,
-    icon: "📋",
-  },
-  {
-    id: 4,
-    title: "Conditional Statements",
-    description: "If, elif, else statements and logical operators",
-    category: "Control Flow",
-    difficulty: "Intermediate",
-    duration: "30 min",
-    xpReward: 80,
-    diamondReward: 18,
-    completed: false,
-    locked: false,
-    icon: "🔀",
-  },
-  {
-    id: 5,
-    title: "Loops and Iteration",
-    description: "For loops, while loops, and loop control",
-    category: "Control Flow",
-    difficulty: "Intermediate",
-    duration: "35 min",
-    xpReward: 90,
-    diamondReward: 20,
-    completed: false,
-    locked: true,
-    icon: "🔄",
-  },
-  {
-    id: 6,
-    title: "Functions Basics",
-    description: "Defining functions, parameters, and return values",
-    category: "Functions",
-    difficulty: "Intermediate",
-    duration: "40 min",
-    xpReward: 100,
-    diamondReward: 25,
-    completed: false,
-    locked: true,
-    icon: "⚙️",
-  },
-]
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
-const categories = ["All", "Python Basics", "Data Structures", "Control Flow", "Functions"]
+export async function generateMetadata(
+  { searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }
+): Promise<Metadata> {
+  const params = await searchParams
 
-export default function LearnPage() {
-  const [selectedCategory, setSelectedCategory] = useState("All")
+  const rawCategory = params?.category
+  const categoryParam = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory
 
-  const filteredLessons =
-    selectedCategory === "All" ? lessons : lessons.filter((lesson) => lesson.category === selectedCategory)
+  // Validate category against DB categories (case-insensitive)
+  let category: string | undefined
+  if (categoryParam) {
+    const rows = await prisma.learningActivity.findMany({
+      where: { isActive: true, activityType: "lesson" },
+      select: { category: true },
+      distinct: ["category"],
+    })
+    const categories = Array.from(
+      new Set(rows.map((r) => r.category).filter((c): c is string => !!c))
+    )
+    const match = categories.find((c) => c.toLowerCase() === categoryParam.toLowerCase())
+    if (match) category = match
+  }
 
-  const completedLessons = lessons.filter((lesson) => lesson.completed).length
-  const totalLessons = lessons.length
-  const progressPercentage = (completedLessons / totalLessons) * 100
+  // Build absolute canonical URL
+  const h = await headers()
+  const host = h.get("host") || "localhost:3000"
+  const proto = h.get("x-forwarded-proto") || "https"
+  const baseUrl = `${proto}://${host}`
+  const url = new URL(`${baseUrl}/learn`)
+  if (category) url.searchParams.set("category", category)
+
+  const title = category
+    ? `${category} — Learn Python`
+    : "Learn Python — Lessons, Exercises, and Mini Projects"
+
+  const description = category
+    ? `Explore ${category} lessons in our interactive Python course. Browse curated topics with examples, practice, and quizzes.`
+    : "Browse interactive Python lessons by category: Python Fundamentals, Control Flow, Functions, Data Structures, Mini Projects, and more. Each lesson includes examples, practice, and a quiz."
+
+  const keywords = [
+    "Python",
+    "Learn Python",
+    "Python Tutorial",
+    "Python Course",
+    "Programming",
+    "Coding",
+    "Lessons",
+    "Exercises",
+    "Quiz",
+    "Beginner",
+    "Intermediate",
+  ]
+  if (category) keywords.push(category)
+
+  return {
+    title,
+    description,
+    keywords,
+    alternates: {
+      canonical: url.toString(),
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
+    openGraph: {
+      title,
+      description,
+      url: url.toString(),
+      siteName: "Learn Python",
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  }
+}
+
+async function fetchInitialData(
+  userId?: string,
+  initialTake: number = 10,
+  preferredCategory?: string
+): Promise<{
+  categories: string[]
+  initialCategory: string
+  items: LearnActivity[]
+  total: number
+}> {
+  // Build category list (only active lessons), put "Python Fundamentals" first if present
+  const categoryRows = await prisma.learningActivity.findMany({
+    where: { isActive: true, activityType: "lesson" },
+    select: { category: true },
+    distinct: ["category"],
+  })
+
+  let categories = Array.from(
+    new Set(categoryRows.map((r) => r.category).filter((c): c is string => !!c))
+  )
+
+  const pfIndex = categories.findIndex((c) => c.toLowerCase() === "python fundamentals")
+  if (pfIndex > 0) {
+    const [pf] = categories.splice(pfIndex, 1)
+    categories.unshift(pf)
+  }
+
+  // Default initial category (but may be overridden by preferredCategory)
+  let initialCategory = categories[0] ?? "Python Fundamentals"
+
+  // If a preferredCategory is provided via query string, honor it when present in DB
+  if (preferredCategory) {
+    const match = categories.find((c) => c.toLowerCase() === preferredCategory.toLowerCase())
+    if (match) {
+      initialCategory = match
+    }
+  }
+
+  // Fetch first page server-side (desktop/tablet default = 10)
+  const where: any = {
+    isActive: true,
+    activityType: "lesson",
+    category: initialCategory,
+  }
+
+  const [total, rows] = await Promise.all([
+    prisma.learningActivity.count({ where }),
+    prisma.learningActivity.findMany({
+      where,
+      orderBy: [{ sortOrder: "asc" }, { topicOrder: "asc" }, { title: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        category: true,
+        difficulty: true,
+        estimatedMinutes: true,
+        diamondReward: true,
+        experienceReward: true,
+        isLocked: true,
+      },
+      skip: 0,
+      take: initialTake, // SSR page size (10 desktop/tablet, 5 mobile)
+    }),
+  ])
+
+  // Mark completion for current user on SSR list
+  let completedSet: Set<string> | undefined
+  if (userId && rows.length > 0) {
+    const attempts = await prisma.activityAttempt.findMany({
+      where: { userId, completed: true, activityId: { in: rows.map((r) => r.id) } },
+      select: { activityId: true },
+    })
+    completedSet = new Set(attempts.map((a) => a.activityId))
+  }
+
+  const items: LearnActivity[] = rows.map((r) => ({
+    id: r.id,
+    slug: r.slug ?? r.id,
+    title: r.title,
+    description: r.description,
+    category: r.category ?? "General",
+    difficulty: r.difficulty ?? 1,
+    estimatedMinutes: Math.max(1, r.estimatedMinutes ?? 5),
+    diamondReward: r.diamondReward ?? 10,
+    experienceReward: r.experienceReward ?? 25,
+    isLocked: !!r.isLocked,
+    completed: completedSet ? completedSet.has(r.id) : false,
+  }))
+
+  return { categories, initialCategory, items, total }
+}
+
+export default async function LearnPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const session = await getServerSession(authOptions)
+  const userId = (session?.user as any)?.id as string | undefined
+
+  const h = await headers();
+  const ua = h.get("user-agent") || ""
+  const isMobileUA =
+    /Mobile|Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(ua)
+
+  const { category } = (searchParams ? await searchParams : {}) as Record<string, string | string[] | undefined>
+  const preferredCategory = Array.isArray(category) ? category[0] : category
+
+  const { categories, initialCategory, items, total } = await fetchInitialData(
+    userId,
+    isMobileUA ? 5 : 10,
+    preferredCategory
+  )
+
+  // SEO-aware UI headings
+  const headingTitle = preferredCategory ? `${initialCategory} — Learn` : "Learn"
+  const headingSubtitle = preferredCategory
+    ? `Explore ${initialCategory} lessons`
+    : "Browse Python lessons"
+
+  // JSON-LD structured data
+  const host2 = h.get("host") || "localhost:3000"
+  const proto2 = h.get("x-forwarded-proto") || "https"
+  const baseUrl2 = `${proto2}://${host2}`
+
+  const itemListElements = items.map((it, idx) => ({
+    "@type": "ListItem",
+    position: idx + 1,
+    name: it.title,
+    url: `${baseUrl2}/learn/${it.slug}`,
+  }))
+
+  const collectionLD = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: preferredCategory
+      ? `${initialCategory} — Learn Python`
+      : "Learn Python — Lessons, Exercises, and Mini Projects",
+    description: preferredCategory
+      ? `Explore ${initialCategory} lessons in our interactive Python course. Browse curated topics with examples, practice, and quizzes.`
+      : "Browse interactive Python lessons by category: Python Fundamentals, Control Flow, Functions, Data Structures, Mini Projects, and more. Each lesson includes examples, practice, and a quiz.",
+    url: preferredCategory
+      ? `${baseUrl2}/learn?category=${encodeURIComponent(initialCategory)}`
+      : `${baseUrl2}/learn`,
+    hasPart: {
+      "@type": "ItemList",
+      itemListElement: itemListElements,
+    },
+  }
+
+  const breadcrumbsLD = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Learn",
+        item: `${baseUrl2}/learn`,
+      },
+      ...(preferredCategory
+        ? [
+            {
+              "@type": "ListItem",
+              position: 2,
+              name: initialCategory,
+              item: `${baseUrl2}/learn?category=${encodeURIComponent(initialCategory)}`,
+            },
+          ]
+        : []),
+    ],
+  }
 
   return (
     <div className="min-h-screen bg-background">
-
-      <MobilePageHeader title="Learn" subtitle="Browse Python lessons" />
-
-      <main className="max-w-md mx-auto md:max-w-4xl lg:max-w-5xl xl:max-w-6xl px-4 py-8 space-y-8">
-        {/* Progress Overview */}
-        <Card className="bg-gradient-to-br from-primary/10 to-secondary/10 border-primary/20">
-          <CardHeader>
-            <CardTitle className="font-[family-name:var(--font-work-sans)] flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-yellow-500" />
-              Learning Progress
-            </CardTitle>
-            <CardDescription>
-              {completedLessons} of {totalLessons} lessons completed
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Progress value={progressPercentage} className="h-3" />
-              <div className="flex justify-between text-sm">
-                <span>{Math.round(progressPercentage)}% Complete</span>
-                <span className="flex items-center gap-1">
-                  <Diamond className="w-4 h-4 text-blue-500" />
-                  {lessons.filter((l) => l.completed).reduce((sum, l) => sum + l.diamondReward, 0)} Diamonds Earned
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Category Filter */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold font-[family-name:var(--font-work-sans)]">Categories</h2>
-          <div className="flex flex-wrap gap-2">
-            {categories.map((category) => (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSelectedCategory(category)}
-                className="text-xs md:text-sm"
-              >
-                {category}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Lessons Grid */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold font-[family-name:var(--font-work-sans)]">
-            {selectedCategory === "All" ? "All Lessons" : selectedCategory}
-          </h2>
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredLessons.map((lesson) => (
-              <Card
-                key={lesson.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  lesson.locked ? "opacity-60" : ""
-                } ${lesson.completed ? "border-green-200 bg-green-50/50" : ""}`}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                        <span className="text-lg">{lesson.icon}</span>
-                      </div>
-                      <div className="flex-1">
-                        <CardTitle className="text-base font-medium leading-tight">{lesson.title}</CardTitle>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="secondary" className="text-xs">
-                            {lesson.difficulty}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">{lesson.duration}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      {lesson.completed && <CheckCircle className="w-5 h-5 text-green-500" />}
-                      {lesson.locked && <Lock className="w-5 h-5 text-muted-foreground" />}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <CardDescription className="text-sm mb-4">{lesson.description}</CardDescription>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="flex items-center gap-1">
-                        <span className="text-yellow-500">⭐</span>
-                        {lesson.xpReward} XP
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Diamond className="w-3 h-3 text-blue-500" />
-                        {lesson.diamondReward}
-                      </span>
-                    </div>
-
-                    <Link href={lesson.locked ? "#" : `/learn/${lesson.id}`}>
-                      <Button size="sm" disabled={lesson.locked} className="flex items-center gap-1">
-                        {lesson.completed ? (
-                          <>
-                            <CheckCircle className="w-3 h-3" />
-                            Review
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-3 h-3" />
-                            {lesson.locked ? "Locked" : "Start"}
-                          </>
-                        )}
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Learning Path */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-[family-name:var(--font-work-sans)]">Recommended Learning Path</CardTitle>
-            <CardDescription>Follow this path for the best learning experience</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="text-sm text-muted-foreground">1. Master Python Basics (Variables, Strings, Lists)</div>
-              <div className="text-sm text-muted-foreground">2. Learn Control Flow (Conditions, Loops)</div>
-              <div className="text-sm text-muted-foreground">3. Understand Functions and Scope</div>
-              <div className="text-sm text-muted-foreground">4. Explore Advanced Data Structures</div>
-            </div>
-          </CardContent>
-        </Card>
-      </main>
-
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionLD) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbsLD) }}
+      />
+      <MobilePageHeader title={headingTitle} subtitle={headingSubtitle} />
+      <LearnGrid
+        categories={categories}
+        initialCategory={initialCategory}
+        initialItems={items}
+        total={total}
+        initialPage={1}
+        pageSizeDesktop={10}
+        pageSizeMobile={5}
+        defaultCategory="Python Fundamentals"
+      />
     </div>
   )
 }

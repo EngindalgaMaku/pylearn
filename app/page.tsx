@@ -282,6 +282,32 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
                 </CardContent>
               </Card>
             </div>
+            {/* Python Tips link/banner */}
+            <Card className="relative overflow-hidden bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 border-primary/20 transition-all hover:shadow-lg">
+              <CardContent className="p-4 md:p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 bg-primary/20 rounded-lg flex items-center justify-center">
+                      <span className="text-lg md:text-xl lg:text-2xl">💡</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm md:text-base lg:text-lg">Python Tips</p>
+                      <p className="text-xs md:text-sm lg:text-base text-muted-foreground">
+                        Quick, practical tips to improve your Python daily
+                      </p>
+                    </div>
+                  </div>
+                  <Link href="/tips">
+                    <Button size="sm" variant="secondary" className="md:size-default lg:px-6">
+                      Browse Tips
+                      <span className="ml-1" aria-hidden="true">→</span>
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+              <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-primary/20 blur-2xl" />
+            </Card>
+
             {/* Daily Python Tip */}
             <PythonTipWidget tip={randomTip || fallbackTip} />
           </div>

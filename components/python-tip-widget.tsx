@@ -54,36 +54,36 @@ export default function PythonTipWidget({ tip }: PythonTipWidgetProps) {
 
   return (
     <Card className="w-full bg-gradient-to-br from-slate-900 to-slate-800 text-white border-slate-700">
-      <CardHeader className="pb-3">
+      <CardHeader className="p-4 md:p-6 pb-2 md:pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-blue-400" />
-            <span className="text-sm text-blue-400 font-medium">Daily Python Tip</span>
+            <Calendar className="h-3 w-3 md:h-4 md:w-4 text-blue-400" />
+            <span className="text-xs md:text-sm text-blue-400 font-medium">Daily Python Tip</span>
           </div>
           <Badge className={getDifficultyColor(tip.difficulty)}>{tip.difficulty}</Badge>
         </div>
-        <CardTitle className="text-lg font-semibold text-white">{tip.title}</CardTitle>
-        <Badge variant="outline" className="w-fit text-xs border-slate-600 text-slate-300">
+        <CardTitle className="text-base md:text-lg font-semibold text-white">{tip.title}</CardTitle>
+        <Badge variant="outline" className="w-fit text-[10px] md:text-xs px-1.5 py-0.5 border-slate-600 text-slate-300">
           {tip.category}
         </Badge>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        <p className="text-slate-300 text-sm leading-relaxed">{tip.content}</p>
+      <CardContent className="p-4 md:p-6 space-y-3 md:space-y-4">
+        <p className="text-slate-300 text-xs md:text-sm leading-relaxed">{tip.content}</p>
 
         <div className="space-y-3">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowCode(!showCode)}
-            className="w-full border-slate-300 bg-white text-slate-900 hover:bg-slate-100 font-semibold"
+            className="w-full h-9 md:h-10 text-xs md:text-sm border-slate-300 bg-white text-slate-900 hover:bg-slate-100 font-semibold"
           >
             <Code className="h-4 w-4 mr-2" />
             {showCode ? "Hide Code" : "Show Code Example"}
           </Button>
 
           {showCode && (
-            <div className="bg-slate-950 rounded-lg p-4 border border-slate-700">
+            <div className="bg-slate-950 rounded-lg p-3 md:p-4 border border-slate-700">
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex gap-1">
                   <div className="w-3 h-3 rounded-full bg-red-500"></div>
@@ -92,14 +92,14 @@ export default function PythonTipWidget({ tip }: PythonTipWidgetProps) {
                 </div>
                 <span className="text-xs text-slate-400 ml-2">Python</span>
               </div>
-              <pre className="text-sm text-green-400 font-mono overflow-x-auto">
+              <pre className="text-xs md:text-sm text-green-400 font-mono overflow-x-auto">
                 <code>{tip.codeExample}</code>
               </pre>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-slate-700">
+        <div className="flex items-center justify-between pt-1 md:pt-2 border-t border-slate-700">
           <div className="flex gap-2">
             <Button
               variant="ghost"
@@ -141,7 +141,7 @@ export default function PythonTipWidget({ tip }: PythonTipWidgetProps) {
                 Completed
               </Badge>
             )}
-            <span className="text-xs text-slate-400">+{tip.xpReward} XP</span>
+            <span className="text-[10px] md:text-xs text-slate-400">+{tip.xpReward} XP</span>
           </div>
         </div>
       </CardContent>

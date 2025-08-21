@@ -1,301 +1,34 @@
-"use client"
+import type { Metadata } from "next"
+import SyntaxPuzzleGame from "@/components/games/SyntaxPuzzleGame"
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, GripVertical } from "lucide-react"
-import Link from "next/link"
-
-const puzzles = [
-  {
-    id: 1,
-    title: "Print Statement",
-    description: "Arrange the code to print 'Hello Python'",
-    blocks: ["print(", "'Hello Python'", ")"],
-    correctOrder: [0, 1, 2],
+export const metadata: Metadata = {
+  title: "Syntax Puzzle – Python Game | PyLearn",
+  description: "Arrange Python code blocks into the correct order. Drag, drop, and nail that syntax.",
+  alternates: { canonical: "/games/syntax-puzzle" },
+  robots: { index: true, follow: true },
+  keywords: [
+    "python game",
+    "syntax puzzle",
+    "drag drop code",
+    "learn python by playing",
+    "python blocks",
+  ],
+  openGraph: {
+    title: "Syntax Puzzle – Python Game",
+    description: "Arrange Python code blocks into the correct order. Drag, drop, and nail that syntax.",
+    type: "website",
+    url: "/games/syntax-puzzle",
+    siteName: "PyLearn",
+    images: ["/icon.png"],
   },
-  {
-    id: 2,
-    title: "Variable Assignment",
-    description: "Create a variable named 'age' with value 25",
-    blocks: ["age", "=", "25"],
-    correctOrder: [0, 1, 2],
+  twitter: {
+    card: "summary_large_image",
+    title: "Syntax Puzzle – Python Game",
+    description: "Arrange Python code blocks into the correct order. Drag, drop, and nail that syntax.",
+    images: ["/icon.png"],
   },
-  {
-    id: 3,
-    title: "If Statement",
-    description: "Complete the if statement structure",
-    blocks: ["if", "x > 5", ":", "print('Greater')"],
-    correctOrder: [0, 1, 2, 3],
-  },
-]
+}
 
-export default function SyntaxPuzzleGame() {
-  const [currentPuzzle, setCurrentPuzzle] = useState(0)
-  const [userOrder, setUserOrder] = useState<number[]>([])
-  const [gameStarted, setGameStarted] = useState(false)
-  const [showResult, setShowResult] = useState(false)
-  const [score, setScore] = useState(0)
-  const [gameCompleted, setGameCompleted] = useState(false)
-
-  const puzzle = puzzles[currentPuzzle]
-
-  const startGame = () => {
-    setGameStarted(true)
-    // Shuffle the blocks for the first puzzle
-    const shuffled = [...Array(puzzle.blocks.length).keys()].sort(() => Math.random() - 0.5)
-    setUserOrder(shuffled)
-  }
-
-  const moveBlock = (fromIndex: number, toIndex: number) => {
-    if (showResult) return
-
-    const newOrder = [...userOrder]
-    const [movedItem] = newOrder.splice(fromIndex, 1)
-    newOrder.splice(toIndex, 0, movedItem)
-    setUserOrder(newOrder)
-  }
-
-  const checkAnswer = () => {
-    const isCorrect = JSON.stringify(userOrder) === JSON.stringify(puzzle.correctOrder)
-    setShowResult(true)
-
-    if (isCorrect) {
-      setScore(score + 1)
-    }
-  }
-
-  const nextPuzzle = () => {
-    if (currentPuzzle < puzzles.length - 1) {
-      setCurrentPuzzle(currentPuzzle + 1)
-      const nextPuzzle = puzzles[currentPuzzle + 1]
-      const shuffled = [...Array(nextPuzzle.blocks.length).keys()].sort(() => Math.random() - 0.5)
-      setUserOrder(shuffled)
-      setShowResult(false)
-    } else {
-      setGameCompleted(true)
-    }
-  }
-
-  const restartGame = () => {
-    setCurrentPuzzle(0)
-    setUserOrder([])
-    setGameStarted(false)
-    setShowResult(false)
-    setScore(0)
-    setGameCompleted(false)
-  }
-
-  if (!gameStarted) {
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="bg-card border-b border-border px-4 py-6">
-          <div className="max-w-md mx-auto flex items-center gap-3">
-            <Link href="/games">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
-            <h1 className="text-xl font-bold font-[family-name:var(--font-work-sans)]">Syntax Puzzle</h1>
-          </div>
-        </header>
-
-        <main className="max-w-md mx-auto px-4 py-6">
-          <Card className="text-center">
-            <CardHeader>
-              <div className="w-20 h-20 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                <span className="text-4xl">🔧</span>
-              </div>
-              <CardTitle className="font-[family-name:var(--font-work-sans)]">Syntax Puzzle</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4 text-left">
-                <h3 className="font-medium">How to Play:</h3>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>• Drag and drop code blocks to arrange them correctly</li>
-                  <li>• Complete the Python syntax puzzles</li>
-                  <li>• Solve all puzzles to earn maximum points</li>
-                </ul>
-              </div>
-
-              <div className="flex gap-2 justify-center">
-                <Badge variant="secondary">{puzzles.length} Puzzles</Badge>
-                <Badge variant="outline">+75 XP</Badge>
-              </div>
-
-              <Button onClick={startGame} className="w-full">
-                Start Puzzle
-              </Button>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    )
-  }
-
-  if (gameCompleted) {
-    const percentage = Math.round((score / puzzles.length) * 100)
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="bg-card border-b border-border px-4 py-6">
-          <div className="max-w-md mx-auto flex items-center gap-3">
-            <Link href="/games">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
-            <h1 className="text-xl font-bold font-[family-name:var(--font-work-sans)]">Puzzle Complete!</h1>
-          </div>
-        </header>
-
-        <main className="max-w-md mx-auto px-4 py-6">
-          <Card className="text-center">
-            <CardHeader>
-              <div className="w-20 h-20 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                <span className="text-4xl">{percentage >= 80 ? "🏆" : "🎉"}</span>
-              </div>
-              <CardTitle className="font-[family-name:var(--font-work-sans)]">
-                {percentage >= 80 ? "Perfect!" : "Well Done!"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <div className="text-3xl font-bold text-primary">
-                  {score}/{puzzles.length}
-                </div>
-                <div className="text-sm text-muted-foreground">Puzzles Solved</div>
-              </div>
-
-              <Badge variant="default" className="text-sm px-3 py-1">
-                +{score * 25} XP Earned
-              </Badge>
-
-              <div className="flex gap-3">
-                <Button onClick={restartGame} variant="outline" className="flex-1 bg-transparent">
-                  Play Again
-                </Button>
-                <Link href="/games" className="flex-1">
-                  <Button className="w-full">More Games</Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    )
-  }
-
-  const isCorrect = showResult && JSON.stringify(userOrder) === JSON.stringify(puzzle.correctOrder)
-
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border px-4 py-6">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-between mb-2">
-            <Link href="/games">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            </Link>
-            <Badge variant="outline">
-              Puzzle {currentPuzzle + 1} of {puzzles.length}
-            </Badge>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-md mx-auto px-4 py-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-[family-name:var(--font-work-sans)]">{puzzle.title}</CardTitle>
-            <p className="text-sm text-muted-foreground">{puzzle.description}</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Drag blocks to arrange them:</h3>
-              <div className="space-y-2">
-                {userOrder.map((blockIndex, position) => (
-                  <div
-                    key={`${blockIndex}-${position}`}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-move ${
-                      showResult
-                        ? isCorrect
-                          ? "bg-primary/10 border-primary/20"
-                          : "bg-destructive/10 border-destructive/20"
-                        : "bg-muted/50 border-border hover:bg-muted"
-                    }`}
-                    onClick={() => {
-                      if (position > 0) moveBlock(position, position - 1)
-                    }}
-                  >
-                    <GripVertical className="w-4 h-4 text-muted-foreground" />
-                    <code className="font-mono flex-1">{puzzle.blocks[blockIndex]}</code>
-                    <div className="flex gap-1">
-                      {position > 0 && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            moveBlock(position, position - 1)
-                          }}
-                          disabled={showResult}
-                        >
-                          ↑
-                        </Button>
-                      )}
-                      {position < userOrder.length - 1 && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            moveBlock(position, position + 1)
-                          }}
-                          disabled={showResult}
-                        >
-                          ↓
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {showResult && (
-              <div className="text-center space-y-3">
-                <p className={`font-medium ${isCorrect ? "text-primary" : "text-destructive"}`}>
-                  {isCorrect ? "Correct! Well done!" : "Not quite right. Try again!"}
-                </p>
-
-                {isCorrect && (
-                  <div className="bg-primary/10 p-3 rounded-lg">
-                    <code className="font-mono text-sm">
-                      {puzzle.correctOrder.map((i) => puzzle.blocks[i]).join(" ")}
-                    </code>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              {!showResult ? (
-                <Button onClick={checkAnswer} className="flex-1">
-                  Check Answer
-                </Button>
-              ) : (
-                <Button onClick={nextPuzzle} className="flex-1">
-                  {currentPuzzle === puzzles.length - 1 ? "Finish" : "Next Puzzle"}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
-  )
+export default function Page() {
+  return <SyntaxPuzzleGame />
 }
