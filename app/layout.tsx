@@ -20,9 +20,12 @@ const openSans = Open_Sans({
   variable: "--font-open-sans",
 })
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+
 export const metadata: Metadata = {
   title: "PyLearn - Python Learning App",
   description: "Master Python through fun and games",
+  metadataBase: new URL(siteUrl),
   generator: "v0.app",
   manifest: "/manifest.json",
   icons: {
@@ -41,7 +44,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${montserrat.variable} ${openSans.variable} antialiased`}>
-      <body className="min-h-screen flex flex-col">
+      <body className="min-h-screen flex flex-col overflow-x-hidden">
 
         {/* Desktop fixed nav */}
         <nav className="hidden md:block fixed top-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-b border-border z-40">
@@ -128,16 +131,16 @@ export default function RootLayout({
                   <span className="text-xs">Activities</span>
                 </Button>
               </Link>
-              <Link href="/shop">
-                <Button variant="ghost" size="sm" className="flex-col gap-1 h-auto py-2 px-2">
-                  <span className="text-lg">💎</span>
-                  <span className="text-xs">Shop</span>
-                </Button>
-              </Link>
               <Link href="/challenges">
                 <Button variant="ghost" size="sm" className="flex-col gap-1 h-auto py-2 px-2">
                   <span className="text-lg">⚡</span>
                   <span className="text-xs">Challenges</span>
+                </Button>
+              </Link>
+              <Link href="/shop">
+                <Button variant="ghost" size="sm" className="flex-col gap-1 h-auto py-2 px-2">
+                  <span className="text-lg">💎</span>
+                  <span className="text-xs">Shop</span>
                 </Button>
               </Link>
             </div>
