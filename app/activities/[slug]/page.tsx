@@ -24,6 +24,8 @@ import QuizRunner from "@/components/activities/quiz/QuizRunner"
 import MatchingRunner from "@/components/activities/matching/MatchingRunner"
 import FillBlanksRunner from "@/components/activities/fill-blanks/FillBlanksRunner"
 import MemoryGameActivity from "@/components/activities/memory/MemoryGameActivity"
+import InteractiveDemoActivity from "@/components/activities/interactive-demo/InteractiveDemoActivity"
+import DragDropActivity from "@/components/activities/drag-drop/DragDropActivity"
 
 type Props = { params: { slug: string } }
 
@@ -223,6 +225,8 @@ export default async function ActivityDetailPage({ params }: Props) {
   let matchingConfig: { slug: string; title: string; timeLimitSec: number; instructions?: string; pairs: { left: string; right: string; topic?: string }[] } | null = null
   let fillConfig: { slug: string; title: string; timeLimitSec?: number; instructions?: string; items: { prompt: string; answer: string; hint?: string; explanation?: string }[] } | null = null
   let memoryContent: any | null = null
+  let interactiveContent: any | null = null
+  let dragDropContent: any | null = null
 
   const typeLower = String(activity.activityType || "").toLowerCase()
 
@@ -331,6 +335,38 @@ export default async function ActivityDetailPage({ params }: Props) {
       }
     } catch (e) {
       // ignore; FillBlanksRunner has sensible defaults
+    }
+  } else if (["drag_drop", "drag-drop", "drag & drop", "drag and drop", "dragdrop", "code builder", "code_builder"].includes(typeLower)) {
+    try {
+      const raw = activity.content ? JSON.parse(activity.content) : null
+      if (raw && typeof raw === "object") {
+        const hasOrder = Array.isArray(raw.blocks) && Array.isArray(raw.correctOrder)
+        const hasClassify = Array.isArray(raw.items) && Array.isArray(raw.categories)
+        if (hasOrder || hasClassify) {
+          dragDropContent = {
+            target: typeof raw.target === "string" ? raw.target : undefined,
+            blocks: Array.isArray(raw.blocks) ? raw.blocks : undefined,
+            correctOrder: Array.isArray(raw.correctOrder) ? raw.correctOrder : undefined,
+            hints: Array.isArray(raw.hints) ? raw.hints : undefined,
+            items: Array.isArray(raw.items) ? raw.items : undefined,
+            categories: Array.isArray(raw.categories) ? raw.categories : undefined,
+          }
+        }
+      }
+    } catch {
+      // ignore malformed JSON; component will show configuration error
+    }
+  } else if (["interactive demo", "interactive_demo"].includes(typeLower)) {
+    try {
+      const raw = activity.content ? JSON.parse(activity.content) : null
+      if (raw) {
+        const title = typeof raw.title === "string" && raw.title.trim() !== "" ? raw.title : activity.title
+        const description = typeof raw.description === "string" && raw.description.trim() !== "" ? raw.description : activity.description
+        const steps = Array.isArray(raw.steps) ? raw.steps : []
+        interactiveContent = { title, description, steps }
+      }
+    } catch {
+      // ignore malformed JSON; component will use activity title/description defaults
     }
   }
 
@@ -487,6 +523,20 @@ export default async function ActivityDetailPage({ params }: Props) {
                 activity={{
                   ...activity,
                   content: memoryContent ?? { cards: [], rules: "", timeLimit: activity.estimatedMinutes * 60 },
+                } as any}
+              />
+            ) : ["drag_drop", "drag-drop", "drag & drop", "drag and drop", "dragdrop", "code builder", "code_builder"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <DragDropActivity
+                activity={{
+                  ...activity,
+                  content: dragDropContent ?? {},
+                } as any}
+              />
+            ) : ["interactive demo", "interactive_demo"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <InteractiveDemoActivity
+                activity={{
+                  ...activity,
+                  content: interactiveContent ?? { title: activity.title, description: activity.description, steps: [] },
                 } as any}
               />
             ) : (
