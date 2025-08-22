@@ -1,34 +1,58 @@
-"use client"
+"use client";
 
-import { useState, type ReactNode } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, CheckCircle, Diamond, Trophy, Lightbulb } from "lucide-react"
+import { useState, useEffect, type ReactNode } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  ArrowLeft,
+  CheckCircle,
+  Diamond,
+  Trophy,
+  Lightbulb,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useSession } from "next-auth/react";
 
 // Lightweight rich text renderer with simple heading/list heuristics
 function headerColor(label: string) {
-  const key = label.trim().toLowerCase()
-  if (key.startsWith("objective")) return "text-emerald-600"
-  if (key.startsWith("prerequisite")) return "text-amber-600"
-  if (key.includes("best") && key.includes("practice")) return "text-indigo-600"
-  if (key.includes("pitfall")) return "text-rose-600"
-  if (key.includes("reference")) return "text-sky-600"
-  if (key.startsWith("cheatsheet") || key.includes("cheat sheet")) return "text-cyan-600"
-  if (key.startsWith("function")) return "text-violet-600"
-  if (key.startsWith("syntax")) return "text-purple-600"
-  if (key.startsWith("example")) return "text-fuchsia-600"
-  if (key.startsWith("practice")) return "text-teal-600"
-  if (key.startsWith("summary")) return "text-slate-700"
-  if (key.startsWith("introduction")) return "text-primary"
-  if (key.startsWith("core concept")) return "text-primary"
-  return "text-primary"
+  const key = label.trim().toLowerCase();
+  if (key.startsWith("objective")) return "text-emerald-600";
+  if (key.startsWith("prerequisite")) return "text-amber-600";
+  if (key.includes("best") && key.includes("practice"))
+    return "text-indigo-600";
+  if (key.includes("pitfall")) return "text-rose-600";
+  if (key.includes("reference")) return "text-sky-600";
+  if (key.startsWith("cheatsheet") || key.includes("cheat sheet"))
+    return "text-cyan-600";
+  if (key.startsWith("function")) return "text-violet-600";
+  if (key.startsWith("syntax")) return "text-purple-600";
+  if (key.startsWith("example")) return "text-fuchsia-600";
+  if (key.startsWith("practice")) return "text-teal-600";
+  if (key.startsWith("summary")) return "text-slate-700";
+  if (key.startsWith("introduction")) return "text-primary";
+  if (key.startsWith("core concept")) return "text-primary";
+  return "text-primary";
 }
 
-function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; cheatsheetCode?: string; isCoreConcepts?: boolean }) {
-  if (!text) return null
+function RichContent({
+  text,
+  cheatsheetCode,
+  isCoreConcepts,
+}: {
+  text?: string;
+  cheatsheetCode?: string;
+  isCoreConcepts?: boolean;
+}) {
+  if (!text) return null;
 
   // Inline header detection for lines like "Objectives: do X", "Prerequisites: ...", or "Functions"
   const INLINE_LABELS = [
@@ -46,24 +70,27 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
     "summary",
     "introduction",
     "core\\s+concepts?",
-  ]
-  const INLINE_HEADER_REGEX = new RegExp(`^([\\t ]*)(${INLINE_LABELS.join("|")})(:?)\\s*`, "i")
+  ];
+  const INLINE_HEADER_REGEX = new RegExp(
+    `^([\\t ]*)(${INLINE_LABELS.join("|")})(:?)\\s*`,
+    "i"
+  );
 
   // Detect and linkify URLs; open in a new tab/window
-  const URL_REGEX = /(https?:\/\/[^\s<>"'()]+)/gi
+  const URL_REGEX = /(https?:\/\/[^\s<>"'()]+)/gi;
   function linkifyText(text: string) {
-    const nodes: ReactNode[] = []
-    let lastIndex = 0
-    let match: RegExpExecArray | null
-    URL_REGEX.lastIndex = 0
-    let linkIdx = 0
+    const nodes: ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    URL_REGEX.lastIndex = 0;
+    let linkIdx = 0;
     while ((match = URL_REGEX.exec(text)) !== null) {
-      const start = match.index
-      const raw = match[0]
-      if (start > lastIndex) nodes.push(text.slice(lastIndex, start))
-      let href = raw
-      const trailing = href.match(/[)\].,;!?]+$/)?.[0] ?? ""
-      if (trailing) href = href.slice(0, href.length - trailing.length)
+      const start = match.index;
+      const raw = match[0];
+      if (start > lastIndex) nodes.push(text.slice(lastIndex, start));
+      let href = raw;
+      const trailing = href.match(/[)\].,;!?]+$/)?.[0] ?? "";
+      if (trailing) href = href.slice(0, href.length - trailing.length);
       nodes.push(
         <a
           key={`lnk-${linkIdx++}-${start}`}
@@ -74,67 +101,75 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
         >
           {href}
         </a>
-      )
-      if (trailing) nodes.push(trailing)
-      lastIndex = start + raw.length
+      );
+      if (trailing) nodes.push(trailing);
+      lastIndex = start + raw.length;
     }
-    if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
-    return nodes
+    if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+    return nodes;
   }
 
   // Split into lines and group lists
-  const lines = text.replace(/\r\n/g, "\n").split("\n")
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
 
-  const blocks: Array<{ type: "heading" | "list" | "para"; content: string | string[]; level?: number; label?: string; ordered?: boolean }> = []
-  let i = 0
+  const blocks: Array<{
+    type: "heading" | "list" | "para";
+    content: string | string[];
+    level?: number;
+    label?: string;
+    ordered?: boolean;
+  }> = [];
+  let i = 0;
   while (i < lines.length) {
-    const raw = lines[i]
-    const line = raw.trim()
+    const raw = lines[i];
+    const line = raw.trim();
 
     // Skip empty lines (but preserve paragraph breaks via blocks)
     if (line === "") {
-      i++
-      continue
+      i++;
+      continue;
     }
 
     // Markdown-style headings: #, ##, ###
-    const md = line.match(/^(#{1,6})\s+(.*)$/)
+    const md = line.match(/^(#{1,6})\s+(.*)$/);
     if (md) {
-      const level = md[1].length
-      const label = md[2].trim()
-      blocks.push({ type: "heading", level, label, content: label })
-      i++
-      continue
+      const level = md[1].length;
+      const label = md[2].trim();
+      blocks.push({ type: "heading", level, label, content: label });
+      i++;
+      continue;
     }
 
     // Colon headings: Title:
-    const colon = line.match(/^(.+?):\s*$/)
+    const colon = line.match(/^(.+?):\s*$/);
     if (colon && colon[1].trim().length <= 80) {
-      const label = colon[1].trim()
-      blocks.push({ type: "heading", level: 3, label, content: label })
-      i++
-      continue
+      const label = colon[1].trim();
+      blocks.push({ type: "heading", level: 3, label, content: label });
+      i++;
+      continue;
     }
 
     // Bullet/numbered list group
     if (/^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-      const startIsOrdered = /^\d+\.\s+/.test(line)
-      const items: string[] = []
+      const startIsOrdered = /^\d+\.\s+/.test(line);
+      const items: string[] = [];
       while (
         i < lines.length &&
-        (startIsOrdered ? /^\d+\.\s+/.test(lines[i].trim()) : /^[-*]\s+/.test(lines[i].trim()))
+        (startIsOrdered
+          ? /^\d+\.\s+/.test(lines[i].trim())
+          : /^[-*]\s+/.test(lines[i].trim()))
       ) {
-        const cur = lines[i].trim()
-        items.push(cur.replace(startIsOrdered ? /^\d+\.\s+/ : /^[-*]\s+/, ""))
-        i++
+        const cur = lines[i].trim();
+        items.push(cur.replace(startIsOrdered ? /^\d+\.\s+/ : /^[-*]\s+/, ""));
+        i++;
       }
-      blocks.push({ type: "list", content: items, ordered: startIsOrdered })
-      continue
+      blocks.push({ type: "list", content: items, ordered: startIsOrdered });
+      continue;
     }
 
     // Paragraph: greedily collect until blank or next special block
-    const paras: string[] = [raw]
-    i++
+    const paras: string[] = [raw];
+    i++;
     while (
       i < lines.length &&
       lines[i].trim() !== "" &&
@@ -142,22 +177,24 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
       !/^(.+?):\s*$/.test(lines[i].trim()) &&
       !/^[-*]\s+/.test(lines[i].trim())
     ) {
-      paras.push(lines[i])
-      i++
+      paras.push(lines[i]);
+      i++;
     }
-    blocks.push({ type: "para", content: paras.join("\n") })
+    blocks.push({ type: "para", content: paras.join("\n") });
   }
 
   return (
     <div className="space-y-3">
       {blocks.map((b, idx) => {
         if (b.type === "heading") {
-          const color = headerColor(b.label || "")
-          const cls = `mt-4 font-semibold ${color}`
+          const color = headerColor(b.label || "");
+          const cls = `mt-4 font-semibold ${color}`;
           // render all headings as h4-like for compactness
           {
-            const labelText = (b.label || "").trim()
-            const isCheatHeading = /^(cheatsheet|cheat\s*sheet)$/i.test(labelText)
+            const labelText = (b.label || "").trim();
+            const isCheatHeading = /^(cheatsheet|cheat\s*sheet)$/i.test(
+              labelText
+            );
             return (
               <div key={idx} className="space-y-2">
                 <div className={cls}>{linkifyText(labelText)}</div>
@@ -170,7 +207,7 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
                         size="sm"
                         onClick={() => {
                           try {
-                            navigator.clipboard?.writeText(cheatsheetCode)
+                            navigator.clipboard?.writeText(cheatsheetCode);
                           } catch {}
                         }}
                         className="text-xs text-slate-300 hover:text-white"
@@ -186,12 +223,12 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
                   </div>
                 ) : null}
               </div>
-            )
+            );
           }
         }
         if (b.type === "list") {
-          const items = b.content as string[]
-          const ordered = (b as any).ordered
+          const items = b.content as string[];
+          const ordered = (b as any).ordered;
           return (
             <ul key={idx} className="space-y-2 list-none pl-0">
               {items.map((li, i2) => (
@@ -215,45 +252,59 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
                   >
                     {ordered ? i2 + 1 : null}
                   </span>
-                  <div className={`text-sm ${isCoreConcepts ? "text-foreground font-medium" : "text-foreground/90"}`}>
+                  <div
+                    className={`text-sm ${
+                      isCoreConcepts
+                        ? "text-foreground font-medium"
+                        : "text-foreground/90"
+                    }`}
+                  >
                     {linkifyText(li)}
                   </div>
                 </li>
               ))}
             </ul>
-          )
+          );
         }
         // paragraph with inline header highlighting
         {
-          const para = String(b.content)
-          const plines = para.split("\n")
+          const para = String(b.content);
+          const plines = para.split("\n");
           return (
             <div key={idx} className="text-muted-foreground leading-relaxed">
               {plines.map((ln, li) => {
-                const m = ln.match(INLINE_HEADER_REGEX)
+                const m = ln.match(INLINE_HEADER_REGEX);
                 if (m) {
-                  const indent = m[1] ?? ""
-                  const labelRaw = m[2] ?? ""
-                  const colon = m[3] ?? ""
-                  const rest = ln.slice(m[0].length)
-                  const color = headerColor(labelRaw)
-                  const isCheatsheetHeader = /^(cheatsheet|cheat\s*sheet)$/i.test(labelRaw.trim())
+                  const indent = m[1] ?? "";
+                  const labelRaw = m[2] ?? "";
+                  const colon = m[3] ?? "";
+                  const rest = ln.slice(m[0].length);
+                  const color = headerColor(labelRaw);
+                  const isCheatsheetHeader =
+                    /^(cheatsheet|cheat\s*sheet)$/i.test(labelRaw.trim());
                   return (
                     <div key={li} className="whitespace-pre-wrap">
                       {indent}
-                      <span className={`font-semibold ${color}`}>{`${labelRaw.replace(/\s+/g, " ")}`}{colon}</span>
+                      <span className={`font-semibold ${color}`}>
+                        {`${labelRaw.replace(/\s+/g, " ")}`}
+                        {colon}
+                      </span>
                       {rest ? " " : null}
                       {rest ? linkifyText(rest) : null}
                       {isCheatsheetHeader && cheatsheetCode ? (
                         <div className="rounded-lg border border-slate-800 overflow-hidden mt-2">
                           <div className="flex items-center justify-between px-3 py-2 bg-slate-900/70">
-                            <span className="text-xs text-slate-300">Cheatsheet</span>
+                            <span className="text-xs text-slate-300">
+                              Cheatsheet
+                            </span>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => {
                                 try {
-                                  navigator.clipboard?.writeText(cheatsheetCode)
+                                  navigator.clipboard?.writeText(
+                                    cheatsheetCode
+                                  );
                                 } catch {}
                               }}
                               className="text-xs text-slate-300 hover:text-white"
@@ -269,10 +320,10 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
                         </div>
                       ) : null}
                     </div>
-                  )
+                  );
                 }
                 {
-                  const isImportant = !!isCoreConcepts && ln.trim() !== ""
+                  const isImportant = !!isCoreConcepts && ln.trim() !== "";
                   return (
                     <div
                       key={li}
@@ -285,38 +336,46 @@ function RichContent({ text, cheatsheetCode, isCoreConcepts }: { text?: string; 
                       {isImportant ? (
                         <Lightbulb className="mt-0.5 h-4 w-4 text-blue-600 flex-shrink-0" />
                       ) : null}
-                      <div className={isImportant ? "text-sm text-foreground" : undefined}>
+                      <div
+                        className={
+                          isImportant ? "text-sm text-foreground" : undefined
+                        }
+                      >
                         {linkifyText(ln)}
                       </div>
                     </div>
-                  )
+                  );
                 }
               })}
             </div>
-          )
+          );
         }
       })}
     </div>
-  )
+  );
 }
 
 export type LessonSection = {
-  title: string
-  content: string
-  codeExample?: string
-}
+  title: string;
+  content: string;
+  codeExample?: string;
+};
+
+export type LessonQuestion = {
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation?: string;
+};
 
 export type LessonQuiz = {
-  question: string
-  options: string[]
-  correctAnswer: number
-  explanation?: string
-}
+  questions: LessonQuestion[];
+};
 
 export type LessonContent = {
-  sections: LessonSection[]
-  quiz?: LessonQuiz
-}
+  sections: LessonSection[];
+  quiz?: LessonQuiz;
+};
 
 export default function LessonViewer({
   title,
@@ -327,115 +386,260 @@ export default function LessonViewer({
   diamondReward,
   content,
   backHref = "/learn",
+  activityId,
+  activitySlug,
 }: {
-  title: string
-  description?: string | null
-  difficulty: number
-  estimatedMinutes: number
-  xpReward: number
-  diamondReward: number
-  content: LessonContent
-  backHref?: string
+  title: string;
+  description?: string | null;
+  difficulty: number;
+  estimatedMinutes: number;
+  xpReward: number;
+  diamondReward: number;
+  content: LessonContent;
+  backHref?: string;
+  activityId: string;
+  activitySlug: string;
 }) {
-  const [currentSection, setCurrentSection] = useState(0)
-  const [showQuiz, setShowQuiz] = useState(false)
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null)
-  const [showResult, setShowResult] = useState(false)
-  const [completed, setCompleted] = useState(false)
+  const [currentSection, setCurrentSection] = useState(0);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
+  const [showResult, setShowResult] = useState(false);
+  const [computedScore, setComputedScore] = useState<number | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const { toast } = useToast();
+  const { data: session, update } = useSession();
 
-  const totalSections = content.sections?.length ?? 0
-  const progress = totalSections > 0 ? ((currentSection + 1) / totalSections) * 100 : 100
+  // Initialize answers array when entering quiz
+  useEffect(() => {
+    if (showQuiz && content.quiz?.questions) {
+      setSelectedAnswers((prev) => {
+        const n = content.quiz!.questions.length;
+        if (prev.length === n) return prev;
+        return Array(n).fill(-1);
+      });
+    }
+  }, [showQuiz, content.quiz]);
+
+  const totalSections = content.sections?.length ?? 0;
+  const progress =
+    totalSections > 0 ? ((currentSection + 1) / totalSections) * 100 : 100;
 
   const handleNext = () => {
     if (currentSection < totalSections - 1) {
-      setCurrentSection(currentSection + 1)
+      setCurrentSection(currentSection + 1);
     } else {
-      setShowQuiz(true)
+      setShowQuiz(true);
     }
-  }
+  };
 
   const handlePrevious = () => {
     if (currentSection > 0) {
-      setCurrentSection(currentSection - 1)
+      setCurrentSection(currentSection - 1);
     }
-  }
+  };
 
   const handleQuizSubmit = () => {
-    setShowResult(true)
-    if (selectedAnswer !== null && content.quiz && selectedAnswer === content.quiz.correctAnswer) {
-      setCompleted(true)
+    if (!content.quiz?.questions?.length) return;
+    const qs = content.quiz.questions;
+
+    // Ensure all questions are answered
+    if (
+      selectedAnswers.length !== qs.length ||
+      selectedAnswers.some((a) => a < 0)
+    ) {
+      setShowResult(false);
+      toast({
+        title: "Answer all questions",
+        description:
+          "Please select an answer for every question before submitting.",
+      });
+      return;
+    }
+
+    let correct = 0;
+    qs.forEach((q, i) => {
+      if (selectedAnswers[i] === q.correctAnswer) correct += 1;
+    });
+    const score = Math.round((correct / qs.length) * 100);
+    setComputedScore(score);
+    setShowResult(true);
+    if (score === 100) {
+      setCompleted(true);
+    }
+  };
+
+  async function handleComplete() {
+    try {
+      setCompleting(true);
+
+      // Compute an optional score if quiz is active
+      let payload: any = { activityId: activityId || undefined };
+      if (!payload.activityId && activitySlug) payload = { slug: activitySlug };
+
+      if (content?.quiz?.questions?.length) {
+        // If quiz exists and results are available, send the computed score
+        if (showResult && computedScore !== null) {
+          payload.score = computedScore;
+        }
+      } else {
+        // No quiz: treat as completed with full score
+        payload.score = 100;
+      }
+
+      const res = await fetch("/api/learn/activities/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      });
+
+      if (res.status === 401) {
+        toast({
+          title: "Login required",
+          description: "You must login to finish and get rewards.",
+        });
+        return;
+      }
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          data?.error || `Failed to complete activity (HTTP ${res.status})`
+        );
+      }
+
+      const diamonds = data.rewards?.diamonds ?? 0;
+      const experience = data.rewards?.experience ?? 0;
+      const already = data.alreadyCompleted === true;
+
+      if (already) {
+        toast({
+          title: "Already completed",
+          description:
+            "This lesson was already completed earlier. No additional rewards granted.",
+        });
+      } else {
+        toast({
+          title: "Lesson completed!",
+          description: `+${experience} XP • +${diamonds} 💎 diamonds`,
+        });
+      }
+
+      // Update session balances with server-authoritative values (no page reload needed)
+      try {
+        if (typeof update === "function" && data?.user) {
+          await update({
+            user: {
+              ...(session?.user || {}),
+              level: data.user.level ?? (session?.user as any)?.level,
+              experience: data.user.experience ?? (session?.user as any)?.experience,
+              currentDiamonds: data.user.currentDiamonds ?? (session?.user as any)?.currentDiamonds,
+              totalDiamonds: data.user.totalDiamonds ?? (session?.user as any)?.totalDiamonds,
+            },
+          } as any);
+        }
+      } catch {}
+
+      setCompleted(true);
+
+      // Navigate back to learn list to reflect completion
+      // Slight delay to allow toast to render
+      setTimeout(() => {
+        window.location.href = backHref;
+      }, 600);
+    } catch (e: any) {
+      toast({
+        title: "Completion failed",
+        description:
+          e?.message || "Could not record completion. Please try again.",
+      });
+    } finally {
+      setCompleting(false);
     }
   }
 
-  const currentSectionData = content.sections?.[currentSection]
+  const currentSectionData = content.sections?.[currentSection];
 
   // Remove placeholder filler texts entirely from rendering
   function stripPlaceholders(s?: string) {
-    if (!s) return ""
-    const t = s.trim()
-    if (/^(No content available\.|No content provided\.|No example provided\.)$/i.test(t)) return ""
-    return s
+    if (!s) return "";
+    const t = s.trim();
+    if (
+      /^(No content available\.|No content provided\.|No example provided\.)$/i.test(
+        t
+      )
+    )
+      return "";
+    return s;
   }
 
   // Detect cheatsheet header in text and extract its following lines as code if no explicit codeExample
   // Accept "Cheatsheet:" and also "Cheatsheet: <some text>" on the same line
-  const cheatHeaderRegex = /^\s*(cheatsheet|cheat\s*sheet)\s*:?.*$/i
+  const cheatHeaderRegex = /^\s*(cheatsheet|cheat\s*sheet)\s*:?.*$/i;
   function extractCheatsheetFromText(text: string) {
-    const lines = text.replace(/\r\n/g, "\n").split("\n")
-    let idx = -1
+    const lines = text.replace(/\r\n/g, "\n").split("\n");
+    let idx = -1;
     for (let k = 0; k < lines.length; k++) {
       if (cheatHeaderRegex.test(lines[k].trim())) {
-        idx = k
-        break
+        idx = k;
+        break;
       }
     }
     if (idx === -1) {
-      return { code: undefined as string | undefined, stripped: text, headerFound: false }
+      return {
+        code: undefined as string | undefined,
+        stripped: text,
+        headerFound: false,
+      };
     }
 
     // Capture any inline content after the header label on the same line
-    const headMatch = lines[idx].match(/^\s*(cheatsheet|cheat\s*sheet)\s*:?\s*(.*)$/i)
-    const inlineTail = (headMatch?.[2] || "").trim()
+    const headMatch = lines[idx].match(
+      /^\s*(cheatsheet|cheat\s*sheet)\s*:?\s*(.*)$/i
+    );
+    const inlineTail = (headMatch?.[2] || "").trim();
 
     // Start after the header, allowing optional blank lines if no inline tail
-    let j = idx + 1
+    let j = idx + 1;
     if (!inlineTail) {
       while (j < lines.length && lines[j].trim() === "") {
-        j++
+        j++;
       }
     }
 
-    const codeLines: string[] = []
+    const codeLines: string[] = [];
     if (inlineTail) {
-      codeLines.push(inlineTail)
+      codeLines.push(inlineTail);
     }
     for (; j < lines.length; j++) {
-      const raw = lines[j]
-      const trimmed = raw.trim()
+      const raw = lines[j];
+      const trimmed = raw.trim();
 
       // Stop if we hit a new section heading (markdown or colon style)
-      if (/^(#{1,6})\s+/.test(trimmed)) break
-      if (/^(.+?):\s*$/.test(trimmed)) break
+      if (/^(#{1,6})\s+/.test(trimmed)) break;
+      if (/^(.+?):\s*$/.test(trimmed)) break;
 
-      codeLines.push(raw)
+      codeLines.push(raw);
     }
 
-    const code = codeLines.join("\n").trim()
+    const code = codeLines.join("\n").trim();
     // Remove only the captured code lines (keep the header line itself)
-    const stripped = [...lines.slice(0, idx + 1), ...lines.slice(j)].join("\n")
-    return { code: code || undefined, stripped, headerFound: true }
+    const stripped = [...lines.slice(0, idx + 1), ...lines.slice(j)].join("\n");
+    return { code: code || undefined, stripped, headerFound: true };
   }
 
-  let textToRender = stripPlaceholders(currentSectionData?.content)
-  let cheatsheetCode = currentSectionData?.codeExample
-  let cheatHeaderFound = false
+  let textToRender = stripPlaceholders(currentSectionData?.content);
+  let cheatsheetCode = currentSectionData?.codeExample;
+  let cheatHeaderFound = false;
 
   if (textToRender) {
-    const scan = extractCheatsheetFromText(textToRender)
-    cheatHeaderFound = scan.headerFound
+    const scan = extractCheatsheetFromText(textToRender);
+    cheatHeaderFound = scan.headerFound;
     if (!cheatsheetCode && scan.code) {
-      cheatsheetCode = scan.code
-      textToRender = scan.stripped
+      cheatsheetCode = scan.code;
+      textToRender = scan.stripped;
     }
   }
 
@@ -443,16 +647,17 @@ export default function LessonViewer({
     !!cheatsheetCode &&
     (cheatHeaderFound ||
       (currentSectionData?.title || "").toLowerCase().includes("cheatsheet") ||
-      (currentSectionData?.title || "").toLowerCase().includes("cheat sheet"))
+      (currentSectionData?.title || "").toLowerCase().includes("cheat sheet"));
 
-  const isCoreConceptsSection =
-    (currentSectionData?.title || "").toLowerCase().includes("core concept")
+  const isCoreConceptsSection = (currentSectionData?.title || "")
+    .toLowerCase()
+    .includes("core concept");
 
   function difficultyLabel(level: number) {
-    if (level <= 1) return "Beginner"
-    if (level === 2) return "Intermediate"
-    if (level >= 3) return "Advanced"
-    return "Beginner"
+    if (level <= 1) return "Beginner";
+    if (level === 2) return "Intermediate";
+    if (level >= 3) return "Advanced";
+    return "Beginner";
   }
 
   return (
@@ -467,15 +672,21 @@ export default function LessonViewer({
             </Button>
           </Link>
           <div className="flex-1">
-            <h1 className="text-lg font-semibold font-[family-name:var(--font-work-sans)]">{title}</h1>
+            <h1 className="text-lg font-semibold font-[family-name:var(--font-work-sans)]">
+              {title}
+            </h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="secondary" className="text-xs">
                 {difficultyLabel(difficulty)}
               </Badge>
-              <span className="text-xs text-muted-foreground">{Math.max(1, estimatedMinutes)} min</span>
+              <span className="text-xs text-muted-foreground">
+                {Math.max(1, estimatedMinutes)} min
+              </span>
             </div>
             {description ? (
-              <CardDescription className="text-xs mt-1 line-clamp-1">{description}</CardDescription>
+              <CardDescription className="text-xs mt-1 line-clamp-1">
+                {description}
+              </CardDescription>
             ) : null}
           </div>
         </div>
@@ -490,9 +701,12 @@ export default function LessonViewer({
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium">
-                      Section {Math.min(currentSection + 1, totalSections)} of {totalSections}
+                      Section {Math.min(currentSection + 1, totalSections)} of{" "}
+                      {totalSections}
                     </span>
-                    <span className="text-sm text-muted-foreground">{Math.round(progress)}% Complete</span>
+                    <span className="text-sm text-muted-foreground">
+                      {Math.round(progress)}% Complete
+                    </span>
                   </div>
                   <Progress value={progress} className="h-2" />
                 </CardContent>
@@ -513,54 +727,67 @@ export default function LessonViewer({
                   isCoreConcepts={isCoreConceptsSection}
                 />
 
-                {currentSectionData?.codeExample && !isCheatSection ? (() => {
-                  const code = currentSectionData.codeExample as string
-                  const handleCopy = () => {
-                    try {
-                      navigator.clipboard?.writeText(code)
-                    } catch {}
-                  }
-                  return (
-                    <div className="rounded-lg border border-slate-800 overflow-hidden">
-                      <div className="flex items-center justify-between px-3 py-2 bg-slate-900/70">
-                        <span className="text-xs text-slate-300">Code</span>
-                        <Button variant="ghost" size="sm" onClick={handleCopy} className="text-xs text-slate-300 hover:text-white">
-                          Copy
-                        </Button>
-                      </div>
-                      <div className="bg-slate-900">
-                        <pre className="text-sm text-slate-100 p-4 overflow-x-auto">
-                          <code>{code}</code>
-                        </pre>
-                      </div>
-                    </div>
-                  )
-                })() : null}
+                {currentSectionData?.codeExample && !isCheatSection
+                  ? (() => {
+                      const code = currentSectionData.codeExample as string;
+                      const handleCopy = () => {
+                        try {
+                          navigator.clipboard?.writeText(code);
+                        } catch {}
+                      };
+                      return (
+                        <div className="rounded-lg border border-slate-800 overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-slate-900/70">
+                            <span className="text-xs text-slate-300">Code</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleCopy}
+                              className="text-xs text-slate-300 hover:text-white"
+                            >
+                              Copy
+                            </Button>
+                          </div>
+                          <div className="bg-slate-900">
+                            <pre className="text-sm text-slate-100 p-4 overflow-x-auto">
+                              <code>{code}</code>
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  : null}
 
-                <div className="flex justify-between pt-4">
-                  <Button variant="outline" onClick={handlePrevious} disabled={currentSection === 0}>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevious}
+                    disabled={currentSection === 0}
+                  >
                     Previous
                   </Button>
                   {content.quiz ? (
                     <Button onClick={handleNext}>
-                      {currentSection >= totalSections - 1 ? "Take Quiz" : "Next"}
+                      {currentSection >= totalSections - 1
+                        ? "Take Quiz"
+                        : "Next"}
                     </Button>
                   ) : (
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
                       <div className="flex items-center gap-2 text-sm">
                         <span className="flex items-center gap-1">
-                          <span className="text-yellow-500">⭐</span>+{xpReward} XP
+                          <span className="text-yellow-500">⭐</span>+{xpReward}{" "}
+                          XP
                         </span>
                         <span className="flex items-center gap-1">
-                          <Diamond className="w-3 h-3 text-blue-500" />+{diamondReward}
+                          <Diamond className="w-3 h-3 text-blue-500" />+
+                          {diamondReward}
                         </span>
                       </div>
-                      <Link href={backHref}>
-                        <Button>
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Complete Lesson
-                        </Button>
-                      </Link>
+                      <Button className="w-full sm:w-auto" onClick={handleComplete} disabled={completing}>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        {completing ? "Completing..." : "Complete Lesson"}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -576,55 +803,86 @@ export default function LessonViewer({
                   <Trophy className="w-5 h-5 text-yellow-500" />
                   Knowledge Check
                 </CardTitle>
-                <CardDescription>Test your understanding of {title}</CardDescription>
+                <CardDescription>
+                  Test your understanding of {title}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <h3 className="font-medium">{content.quiz.question}</h3>
+                <div className="space-y-5">
+                  {content.quiz?.questions?.map((q, qIdx) => (
+                    <div key={qIdx} className="space-y-2">
+                      <div className="font-medium">{qIdx + 1}. {q.question}</div>
+                      <div className="space-y-2">
+                        {q.options.map((option, optIdx) => (
+                          <Button
+                            key={optIdx}
+                            variant={selectedAnswers[qIdx] === optIdx ? "default" : "outline"}
+                            className="w-full justify-start text-left h-auto p-4 items-start gap-3 whitespace-normal"
+                            onClick={() => {
+                              if (showResult) return;
+                              setSelectedAnswers((prev) => {
+                                const next = [...prev];
+                                next[qIdx] = optIdx;
+                                return next;
+                              });
+                            }}
+                            disabled={showResult}
+                          >
+                            <span className="mr-3 font-medium flex-shrink-0">
+                              {String.fromCharCode(65 + optIdx)}.
+                            </span>
+                            <span className="lesson-option-text flex-1 min-w-0 text-left break-words">
+                              {option}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
 
-                  <div className="space-y-2">
-                    {content.quiz.options.map((option, index) => (
-                      <Button
-                        key={index}
-                        variant={selectedAnswer === index ? "default" : "outline"}
-                        className="w-full justify-start text-left h-auto p-4"
-                        onClick={() => setSelectedAnswer(index)}
-                        disabled={showResult}
-                      >
-                        <span className="mr-3 font-medium">{String.fromCharCode(65 + index)}.</span>
-                        {option}
-                      </Button>
-                    ))}
-                  </div>
-
-                  {showResult && (
-                    <div
-                      className={`p-4 rounded-lg ${
-                        selectedAnswer === content.quiz.correctAnswer
-                          ? "bg-green-50 border border-green-200"
-                          : "bg-red-50 border border-red-200"
-                      }`}
-                    >
-                      <p className="font-medium mb-2">
-                        {selectedAnswer === content.quiz.correctAnswer ? "✅ Correct!" : "❌ Incorrect"}
-                      </p>
-                      {content.quiz.explanation ? (
-                        <p className="text-sm text-muted-foreground">{content.quiz.explanation}</p>
-                      ) : null}
+                      {showResult && (
+                        <div
+                          className={`p-3 rounded-lg ${
+                            selectedAnswers[qIdx] === q.correctAnswer
+                              ? "bg-green-50 border border-green-200"
+                              : "bg-red-50 border border-red-200"
+                          }`}
+                        >
+                          <p className="font-medium mb-1">
+                            {selectedAnswers[qIdx] === q.correctAnswer ? "✅ Correct!" : "❌ Incorrect"}
+                          </p>
+                          {q.explanation ? (
+                            <p className="text-sm text-muted-foreground">{q.explanation}</p>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  ))}
 
-                  <div className="flex justify-between pt-4">
-                    <Button variant="outline" onClick={() => setShowQuiz(false)} disabled={showResult}>
+                  {showResult && computedScore !== null ? (
+                    <div className="p-3 rounded-lg border bg-muted/30">
+                      <div className="font-medium">Score: {computedScore}%</div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowQuiz(false)}
+                      disabled={showResult}
+                      className="w-full sm:w-auto"
+                    >
                       Back to Lesson
                     </Button>
                     {!showResult ? (
-                      <Button onClick={handleQuizSubmit} disabled={selectedAnswer === null}>
-                        Submit Answer
+                      <Button
+                        onClick={handleQuizSubmit}
+                        disabled={!content.quiz?.questions?.length || selectedAnswers.some((a) => a < 0)}
+                        className="w-full sm:w-auto"
+                      >
+                        Submit Answers
                       </Button>
                     ) : (
-                      <div className="flex items-center gap-4">
-                        {completed && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                        {computedScore !== null && (
                           <div className="flex items-center gap-2 text-sm">
                             <span className="flex items-center gap-1">
                               <span className="text-yellow-500">⭐</span>+{xpReward} XP
@@ -634,12 +892,10 @@ export default function LessonViewer({
                             </span>
                           </div>
                         )}
-                        <Link href={backHref}>
-                          <Button>
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Complete Lesson
-                          </Button>
-                        </Link>
+                        <Button onClick={handleComplete} disabled={completing} className="w-full sm:w-auto">
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          {completing ? "Completing..." : "Complete Lesson"}
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -652,6 +908,20 @@ export default function LessonViewer({
 
       {/* Spacer for fixed navigation */}
       <div className="h-24"></div>
+      <style jsx global>{`
+        @media (max-width: 640px) {
+          .lesson-option-text {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3; /* change to 2 if you prefer two lines */
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+          }
+        }
+      `}</style>
     </div>
-  )
+  );
 }

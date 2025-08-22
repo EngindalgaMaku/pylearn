@@ -21,6 +21,21 @@ export type LearnActivity = {
   experienceReward: number
   isLocked: boolean
   completed?: boolean
+  order?: number
+  tags?: string[]
+}
+
+function tagClasses(tag: string): string {
+  const t = tag.toLowerCase()
+  if (/(intro|introduction|basics|fundamentals|getting started)/.test(t)) return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
+  if (/(variable|type|string|number|boolean)/.test(t)) return "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+  if (/(list|tuple|dict|set|data structure)/.test(t)) return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900"
+  if (/(loop|for|while|control|condition|if|elif|else)/.test(t)) return "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200 dark:bg-fuchsia-950/40 dark:text-fuchsia-300 dark:border-fuchsia-900"
+  if (/(function|def|parameter|return|scope)/.test(t)) return "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900"
+  if (/(class|oop|object)/.test(t)) return "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
+  if (/(file|io|read|write)/.test(t)) return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-800"
+  if (/(quiz|practice|exercise|challenge)/.test(t)) return "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-900"
+  return "bg-muted text-foreground border-border"
 }
 
 function difficultyLabel(level: number) {
@@ -218,7 +233,6 @@ export default function LearnGrid({
     })
   }
 
-
   // Category change handler
   const handleCategoryClick = (category: string) => {
     setSelectedCategory(category)
@@ -253,7 +267,11 @@ export default function LearnGrid({
         <CardHeader>
           <CardTitle className="font-[family-name:var(--font-work-sans)] flex items-center gap-2">
             <Trophy className="w-5 h-5 text-yellow-500" />
-            {headerTitle}
+            {selectedCategory ? (
+              <>Learn Summary for <span className="font-semibold">{selectedCategory}</span></>
+            ) : (
+              headerTitle
+            )}
           </CardTitle>
           <CardDescription>
             {headerSubtitle}
@@ -286,7 +304,26 @@ export default function LearnGrid({
       {/* Category Filter */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold font-[family-name:var(--font-work-sans)]">Categories</h2>
-        <div className="flex flex-wrap gap-2">
+
+        {/* Mobile: horizontal scroll chips with snap */}
+        <div className="md:hidden -mx-4 px-4">
+          <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory">
+            {categories.map((category) => (
+              <Button
+                key={category}
+                variant={selectedCategory === category ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleCategoryClick(category)}
+                className={`min-w-max snap-start whitespace-nowrap text-xs ${selectedCategory === category ? "" : "bg-card"}`}
+              >
+                {category}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Desktop: wrapped chip grid */}
+        <div className="hidden md:flex flex-wrap gap-2">
           {categories.map((category) => (
             <Button
               key={category}
@@ -322,9 +359,14 @@ export default function LearnGrid({
                       <span className="text-lg">{categoryEmoji(lesson.category)}</span>
                     </div>
                     <div className="flex-1">
-                      <CardTitle className="text-base font-medium leading-tight">
-                        {lesson.title}
-                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        {typeof lesson.order === "number" && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">#{lesson.order}</Badge>
+                        )}
+                        <CardTitle className="text-base font-medium leading-tight">
+                          {lesson.title}
+                        </CardTitle>
+                      </div>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="secondary" className="text-xs">
                           {difficultyLabel(lesson.difficulty)}
@@ -333,6 +375,21 @@ export default function LearnGrid({
                           {Math.max(1, lesson.estimatedMinutes)} min
                         </span>
                       </div>
+                      {lesson.tags && lesson.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {lesson.tags.slice(0, 5).map((t, i) => {
+                            const cls = tagClasses(t)
+                            return (
+                              <Badge key={`${lesson.id}-tag-${i}`} variant="outline" className={`text-[10px] ${cls}`}>
+                                {t}
+                              </Badge>
+                            )
+                          })}
+                          {lesson.tags.length > 5 && (
+                            <Badge variant="outline" className="text-[10px]">+{lesson.tags.length - 5}</Badge>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useToast } from "@/hooks/use-toast"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -100,6 +102,10 @@ export default function CodeMatchGame() {
   const [gameCompleted, setGameCompleted] = useState(false)
   const [timeLeft, setTimeLeft] = useState(30)
   const [gameStarted, setGameStarted] = useState(false)
+  const runStartRef = useRef<number | null>(null)
+  const postedRef = useRef(false)
+  const { toast } = useToast()
+  const TOTAL_ROUNDS = 10
 
   const currentMatch = questions[currentRound]
   const progress = questions.length > 0 ? ((currentRound + 1) / questions.length) * 100 : 0
@@ -115,7 +121,9 @@ export default function CodeMatchGame() {
 
   const startGame = () => {
     // Prepare a new randomized set of questions and options each time
-    const shuffledQuestions = shuffleArray(QUESTIONS_POOL).map(shuffleQuestionOptions)
+    const shuffledQuestions = shuffleArray(QUESTIONS_POOL)
+      .slice(0, TOTAL_ROUNDS)
+      .map(shuffleQuestionOptions)
     setQuestions(shuffledQuestions)
     setCurrentRound(0)
     setSelectedAnswer(null)
@@ -124,6 +132,8 @@ export default function CodeMatchGame() {
     setGameCompleted(false)
     setTimeLeft(30)
     setGameStarted(true)
+    runStartRef.current = Date.now()
+    postedRef.current = false
   }
 
   const handleTimeUp = () => {
@@ -166,7 +176,33 @@ export default function CodeMatchGame() {
     setGameCompleted(false)
     setTimeLeft(30)
     setGameStarted(false)
+    runStartRef.current = null
+    postedRef.current = false
   }
+
+  // Post session on completion (once)
+  useEffect(() => {
+    if (!gameCompleted || postedRef.current) return
+    postedRef.current = true
+    const durationSec = runStartRef.current ? Math.max(0, Math.round((Date.now() - runStartRef.current) / 1000)) : 0
+    const payload = {
+      gameKey: "code-match",
+      score,
+      correctCount: score,
+      durationSec,
+    }
+    fetch("/api/games/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => {
+      toast({
+        title: "Session save failed",
+        description: "We couldn't record your game session. Your progress may not update.",
+        variant: "destructive",
+      })
+    })
+  }, [gameCompleted, score])
 
   if (!gameStarted) {
     return (
@@ -198,13 +234,13 @@ export default function CodeMatchGame() {
                   <li>• You have 30 seconds per question</li>
                   <li>• Earn 1 point per correct round</li>
                   <li>• One wrong answer ends the game</li>
-                  <li>• Complete all {QUESTIONS_POOL.length} rounds to win!</li>
-                </ul>
+                  <li>• Complete all 10 rounds to win!</li>
+              </ul>
               </div>
 
               <div className="flex gap-2 justify-center">
-                <Badge variant="secondary">{QUESTIONS_POOL.length} Questions</Badge>
-                <Badge variant="outline">+{QUESTIONS_POOL.length * 10} XP</Badge>
+                <Badge variant="secondary">10 Questions</Badge>
+                <Badge variant="outline">+100 XP</Badge>
               </div>
 
               <Button onClick={startGame} className="w-full">

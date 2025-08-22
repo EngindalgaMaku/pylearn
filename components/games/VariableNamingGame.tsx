@@ -1,6 +1,8 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
+import { useToast } from "@/hooks/use-toast"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -58,6 +60,9 @@ export default function VariableNamingGame() {
   const [gameOver, setGameOver] = useState(false)
   const [timeLeft, setTimeLeft] = useState(20)
   const [started, setStarted] = useState(false)
+  const runStartRef = useRef<number | null>(null)
+  const postedRef = useRef(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     if (!started || gameOver) return
@@ -78,6 +83,8 @@ export default function VariableNamingGame() {
   const onStart = () => {
     setStarted(true)
     setTimeLeft(20)
+    runStartRef.current = Date.now()
+    postedRef.current = false
   }
 
   const submitAnswer = (guessValid: boolean) => {
@@ -108,7 +115,39 @@ export default function VariableNamingGame() {
     setGameOver(false)
     setTimeLeft(20)
     setStarted(false)
+    runStartRef.current = null
+    postedRef.current = false
   }
+
+  // Post session when game over
+  useEffect(() => {
+    const postSession = async () => {
+      if (!gameOver || !started || postedRef.current) return
+      postedRef.current = true
+      const startedAt = runStartRef.current ?? Date.now()
+      const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      try {
+        await fetch("/api/games/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gameKey: "variable-naming",
+            score,
+            correctCount: score,
+            durationSec,
+          }),
+        })
+      } catch (e) {
+        console.error("Failed to post game session (variable-naming)", e)
+        toast({
+          title: "Session save failed",
+          description: "We couldn't record your game session. Your progress may not update.",
+          variant: "destructive",
+        })
+      }
+    }
+    postSession()
+  }, [gameOver, started, score])
 
   if (!started) {
     return (

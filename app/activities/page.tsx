@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import ActivitiesClient, { type ActivityDTO } from "@/components/activities/ActivitiesClient";
 
+// Always render this page dynamically to reflect latest completion state
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function generateMetadata(
-  { searchParams }: { searchParams?: Record<string, string | string[]> }
+  { searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }
 ): Promise<Metadata> {
   const hs = await headers();
   const proto = hs.get("x-forwarded-proto") || "http";
   const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000";
   const origin = `${proto}://${host}`;
 
-  const spAny = searchParams ?? {};
+  const spAny = searchParams ? await searchParams : {};
  const getParam = (key: string): string | undefined => {
    const v = (spAny as Record<string, unknown>)[key];
    if (Array.isArray(v)) return v[0] as string;
@@ -101,19 +107,19 @@ function normalizeType(activityType: string | null | undefined): string {
   return activityType;
 }
 
-export default async function ActivitiesPage(props: { searchParams: any }) {
-  // Next 14 passes a plain object; Next 15 may pass a Promise-like.
-  const spAny = props?.searchParams as any
-  const sp = spAny && typeof spAny.then === "function" ? await spAny : (spAny ?? {})
+export default async function ActivitiesPage(props: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // Fixed page size per request: always show 10 activities per page
   const pageSize = 10;
 
+  // Get searchParams and await it
+  const sp = await props.searchParams;
+
   // Helpers to read query params
   const getParam = (key: string): string | undefined => {
-    const v = (sp as Record<string, unknown>)?.[key]
-    if (Array.isArray(v)) return v[0] as string
-    if (typeof v === "string") return v
-    return undefined
+    const v = sp[key];
+    if (Array.isArray(v)) return v[0];
+    if (typeof v === "string") return v;
+    return undefined;
   }
 
   const categoryParam = getParam("category");
@@ -191,6 +197,23 @@ export default async function ActivitiesPage(props: { searchParams: any }) {
     }),
   ]);
 
+  // Determine which of the current page activities are completed by the logged-in user
+  const session = await getServerSession(authOptions);
+  const userId = (session?.user as any)?.id as string | undefined;
+  let completedSet = new Set<string>();
+  if (userId && rows.length > 0) {
+    const ids = rows.map((r) => r.id);
+    const attempts = await prisma.activityAttempt.findMany({
+      where: {
+        userId,
+        activityId: { in: ids },
+        completed: true,
+      },
+      select: { activityId: true },
+    });
+    completedSet = new Set(attempts.map((a) => a.activityId));
+  }
+
   const activities: ActivityDTO[] = rows.map((a) => ({
     id: a.id,
     slug: a.slug ?? a.id,
@@ -203,7 +226,7 @@ export default async function ActivitiesPage(props: { searchParams: any }) {
     experienceReward: Number(a.experienceReward ?? 0),
     estimatedMinutes: Number(a.estimatedMinutes ?? 5),
     isLocked: false,
-    isCompleted: false,
+    isCompleted: completedSet.has(a.id),
     tags: toArraySafe(a.tags as unknown),
   }));
 

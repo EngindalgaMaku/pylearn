@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useToast } from "@/hooks/use-toast"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -38,6 +40,9 @@ export default function SyntaxPuzzleGame() {
   const [showResult, setShowResult] = useState(false)
   const [score, setScore] = useState(0)
   const [gameCompleted, setGameCompleted] = useState(false)
+  const runStartRef = useRef<number | null>(null)
+  const postedRef = useRef(false)
+  const { toast } = useToast()
 
   const puzzle = puzzles[currentPuzzle]
 
@@ -46,6 +51,8 @@ export default function SyntaxPuzzleGame() {
     // Shuffle the blocks for the first puzzle
     const shuffled = [...Array(puzzle.blocks.length).keys()].sort(() => Math.random() - 0.5)
     setUserOrder(shuffled)
+    runStartRef.current = Date.now()
+    postedRef.current = false
   }
 
   const moveBlock = (fromIndex: number, toIndex: number) => {
@@ -85,7 +92,39 @@ export default function SyntaxPuzzleGame() {
     setShowResult(false)
     setScore(0)
     setGameCompleted(false)
+    runStartRef.current = null
+    postedRef.current = false
   }
+
+  // Post a session when game completed
+  useEffect(() => {
+    const postSession = async () => {
+      if (!gameCompleted || postedRef.current) return
+      postedRef.current = true
+      const startedAt = runStartRef.current ?? Date.now()
+      const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      try {
+        await fetch("/api/games/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gameKey: "syntax-puzzle",
+            score,
+            correctCount: score,
+            durationSec,
+          }),
+        })
+      } catch (e) {
+        console.error("Failed to post game session (syntax-puzzle)", e)
+        toast({
+          title: "Session save failed",
+          description: "We couldn't record your puzzle session. Your progress may not update.",
+          variant: "destructive",
+        })
+      }
+    }
+    postSession()
+  }, [gameCompleted, score])
 
   if (!gameStarted) {
     return (

@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         imagePath: true,
+        imageUrl: true,
         thumbnailUrl: true,
       } as any,
     })
@@ -89,72 +90,69 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Card not found" }, { status: 404 })
     }
 
-    // Choose best path according to type
-    let candidatePath: string | null = null
-    if (type === "thumbnail") {
-      candidatePath =
-        normalizePublicPath((card as any).thumbnailUrl) ||
-        normalizePublicPath((card as any).imagePath)
-    } else if (type === "full") {
-      candidatePath =
-        normalizePublicPath((card as any).imagePath) ||
-        normalizePublicPath((card as any).thumbnailUrl)
-    } else {
-      // preview
-      candidatePath =
-        normalizePublicPath((card as any).imagePath) ||
-        normalizePublicPath((card as any).thumbnailUrl)
-    }
+    // Build ordered candidates
+    const normalizedThumb = normalizePublicPath((card as any).thumbnailUrl)
+    const normalizedFull = normalizePublicPath((card as any).imagePath)
+    const normalizedUrl = normalizePublicPath((card as any).imageUrl)
+    const candidates: (string | null)[] =
+      type === "thumbnail"
+        ? [normalizedThumb, normalizedUrl, normalizedFull]
+        : [normalizedFull, normalizedUrl, normalizedThumb] // full and preview prefer full first
 
-    // If it’s a remote URL, proxying could be implemented; for now expect local public files
-    if (!candidatePath || candidatePath.startsWith("http")) {
-      // Attempt to fallback to placeholder in public
-      const placeholder = path.join(process.cwd(), "public", "placeholder.svg")
-      if (existsSync(placeholder)) {
-        const buffer = await readFile(placeholder)
-        return new NextResponse(buffer as any, {
-          headers: {
-            "Content-Type": "image/svg+xml",
-            "Cache-Control": "private, no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-          },
-        })
+    // Try each candidate: proxy remote or read local
+    for (const candidatePath of candidates) {
+      if (!candidatePath) continue
+      if (candidatePath.startsWith("http://") || candidatePath.startsWith("https://")) {
+        try {
+          const upstream = await fetch(candidatePath)
+          if (upstream.ok && upstream.body) {
+            const contentType = upstream.headers.get("content-type") || "application/octet-stream"
+            const arrBuf = await upstream.arrayBuffer()
+            return new NextResponse(Buffer.from(arrBuf) as any, {
+              headers: {
+                "Content-Type": contentType,
+                "Cache-Control": "private, no-cache, no-store, must-revalidate",
+                Pragma: "no-cache",
+                Expires: "0",
+                "X-Content-Type-Options": "nosniff",
+              },
+            })
+          }
+        } catch (e) {
+          // try next candidate
+        }
+        continue
       }
-      return NextResponse.json({ error: "Image not available" }, { status: 404 })
-    }
 
-    const filePath = resolveOnDisk(candidatePath)
-    if (!filePath) {
-      // Fallback to placeholder instead of hard 404 for better UX
-      const placeholder = path.join(process.cwd(), "public", "placeholder.svg")
-      if (existsSync(placeholder)) {
-        const buffer = await readFile(placeholder)
-        return new NextResponse(buffer as any, {
-          headers: {
-            "Content-Type": "image/svg+xml",
-            "Cache-Control": "private, no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-          },
+      const filePath = resolveOnDisk(candidatePath)
+      if (filePath) {
+        const buffer = await readFile(filePath)
+        const headers = new Headers({
+          "Content-Type": getMime(filePath),
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+          "X-Content-Type-Options": "nosniff",
+          "X-Frame-Options": "DENY",
+          "Referrer-Policy": "no-referrer",
         })
+        return new NextResponse(buffer as any, { headers })
       }
-      return NextResponse.json(
-        { error: "File not found", path: candidatePath },
-        { status: 404 }
-      )
     }
 
-    const buffer = await readFile(filePath)
-    const headers = new Headers({
-      "Content-Type": getMime(filePath),
-      "Cache-Control": "private, no-cache, no-store, must-revalidate",
-      Pragma: "no-cache",
-      Expires: "0",
-      "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "DENY",
-      "Referrer-Policy": "no-referrer",
-    })
-
-    return new NextResponse(buffer as any, { headers })
+    // Final placeholder if all candidates fail
+    const placeholder = path.join(process.cwd(), "public", "placeholder.svg")
+    if (existsSync(placeholder)) {
+      const buffer = await readFile(placeholder)
+      return new NextResponse(buffer as any, {
+        headers: {
+          "Content-Type": "image/svg+xml",
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      })
+    }
+    return NextResponse.json({ error: "Image not available" }, { status: 404 })
   } catch (err) {
     console.error("secure-image error", err)
     return NextResponse.json({ error: "Image load failed" }, { status: 500 })

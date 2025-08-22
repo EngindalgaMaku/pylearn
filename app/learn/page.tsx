@@ -134,39 +134,90 @@ async function fetchInitialData(
     category: initialCategory,
   }
 
-  const [total, rows] = await Promise.all([
-    prisma.learningActivity.count({ where }),
-    prisma.learningActivity.findMany({
-      where,
-      orderBy: [{ sortOrder: "asc" }, { topicOrder: "asc" }, { title: "asc" }],
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        description: true,
-        category: true,
-        difficulty: true,
-        estimatedMinutes: true,
-        diamondReward: true,
-        experienceReward: true,
-        isLocked: true,
-      },
-      skip: 0,
-      take: initialTake, // SSR page size (10 desktop/tablet, 5 mobile)
-    }),
-  ])
+  const total = await prisma.learningActivity.count({ where })
+  const rows = await prisma.learningActivity.findMany({
+    where,
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      description: true,
+      category: true,
+      difficulty: true,
+      estimatedMinutes: true,
+      diamondReward: true,
+      experienceReward: true,
+      isLocked: true,
+      tags: true,
+      content: true,
+      sortOrder: true,
+      topicOrder: true,
+    },
+  })
+
+  // Smart ordering score: must mirror API logic
+  function scoreActivity(r: any): number {
+    const title = (r.title || "").toLowerCase()
+    const content = (r.content || "").toLowerCase()
+    const tags: string[] = r.tags
+      ? Array.isArray(r.tags)
+        ? (r.tags as unknown as string[])
+        : String(r.tags)
+            .split(",")
+            .map((t) => t.trim().toLowerCase())
+            .filter(Boolean)
+      : []
+
+    const text = `${title} ${content} ${tags.join(" ")}`
+
+    let score = 0
+    score += (r.sortOrder ?? 0) * 10
+    score += (r.topicOrder ?? 0) * 2
+    score += (r.difficulty ?? 1) * 3
+
+    const weight = (cond: boolean, w: number) => { if (cond) score += w }
+    weight(/\b(intro|introduction|getting started|basics|fundamentals)\b/.test(text), -40)
+    weight(/\b(variable|variables|type|types|data type)\b/.test(text), -30)
+    weight(/\b(operator|arithmetic|comparison|logical)\b/.test(text), -24)
+    weight(/\b(string|f-string|formatting)\b/.test(text), -22)
+    weight(/\b(list|tuple)\b/.test(text), -20)
+    weight(/\b(dict|dictionary|set)\b/.test(text), -18)
+    weight(/\b(condition|if|elif|else)\b/.test(text), -16)
+    weight(/\b(loop|for|while|iteration|range)\b/.test(text), -14)
+    weight(/\b(function|def|parameter|argument|return|scope)\b/.test(text), -12)
+    weight(/\b(module|package|import)\b/.test(text), -10)
+    weight(/\b(file|io|read|write|path)\b/.test(text), -8)
+    weight(/\b(class|object|oop|inheritance|method)\b/.test(text), -6)
+    weight(/\b(exception|error handling|try|except|finally)\b/.test(text), -5)
+
+    weight(tags.includes("beginner"), -20)
+    weight(tags.includes("intermediate"), 5)
+    weight(tags.includes("advanced"), 12)
+
+    const lengthPenalty = Math.min(20, Math.floor((content.length || 0) / 800))
+    score += lengthPenalty
+
+    return score
+  }
+
+  const ordered = rows
+    .map((r) => ({ r, s: scoreActivity(r) }))
+    .sort((a, b) => a.s - b.s)
+    .map((x) => x.r)
+
+  const pageRows = ordered.slice(0, initialTake)
 
   // Mark completion for current user on SSR list
   let completedSet: Set<string> | undefined
-  if (userId && rows.length > 0) {
+  if (userId && pageRows.length > 0) {
     const attempts = await prisma.activityAttempt.findMany({
-      where: { userId, completed: true, activityId: { in: rows.map((r) => r.id) } },
+      where: { userId, completed: true, activityId: { in: pageRows.map((r) => r.id) } },
       select: { activityId: true },
     })
     completedSet = new Set(attempts.map((a) => a.activityId))
   }
 
-  const items: LearnActivity[] = rows.map((r) => ({
+  const items: LearnActivity[] = pageRows.map((r, idx) => ({
     id: r.id,
     slug: r.slug ?? r.id,
     title: r.title,
@@ -177,6 +228,16 @@ async function fetchInitialData(
     diamondReward: r.diamondReward ?? 10,
     experienceReward: r.experienceReward ?? 25,
     isLocked: !!r.isLocked,
+    // parse tags (comma separated string -> string[])
+    tags: r.tags
+      ? Array.isArray(r.tags)
+        ? (r.tags as unknown as string[])
+        : String(r.tags)
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+      : [],
+    order: idx + 1,
     completed: completedSet ? completedSet.has(r.id) : false,
   }))
 

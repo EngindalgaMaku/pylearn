@@ -7,6 +7,7 @@ import { Footer } from "@/components/footer"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import Providers from "./providers"
+import { Toaster } from "@/components/ui/toaster"
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -26,7 +27,6 @@ export const metadata: Metadata = {
   title: "PyLearn - Python Learning App",
   description: "Master Python through fun and games",
   metadataBase: new URL(siteUrl),
-  generator: "v0.app",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon.png",
@@ -54,7 +54,9 @@ export default function RootLayout({
                 <Link href="/" className="flex items-center gap-3">
                   <img
                     src="/python.svg"
-                    alt="PyLearn logo"
+                    alt="PyLearn - Python Öğrenme Platformu"
+                    width="32"
+                    height="32"
                     className="h-7 w-7 lg:h-8 lg:w-8"
                   />
                   <div className="flex flex-col">
@@ -82,14 +84,14 @@ export default function RootLayout({
                       Challenges
                     </Button>
                   </Link>
-                  <Link href="/shop">
-                    <Button variant="ghost" size="sm" className="text-sm lg:text-base font-medium">
-                      💎 Shop
-                    </Button>
-                  </Link>
                   <Link href="/leaderboard">
                     <Button variant="ghost" size="sm" className="text-sm lg:text-base font-medium">
                       Leaderboard
+                    </Button>
+                  </Link>
+                  <Link href="/shop">
+                    <Button variant="ghost" size="sm" className="text-sm lg:text-base font-medium">
+                      💎 Shop
                     </Button>
                   </Link>
                 </div>
@@ -102,6 +104,7 @@ export default function RootLayout({
         <main className="flex-1 md:pt-20 lg:pt-24 pb-24 md:pb-0">
           <Providers>
             {children}
+            <Toaster />
           </Providers>
         </main>
 
@@ -113,7 +116,9 @@ export default function RootLayout({
                 <Button variant="ghost" size="sm" className="flex-col gap-1 h-auto py-2 px-2">
                   <img
                     src="/python.svg"
-                    alt="Home"
+                    alt="Ana Sayfa"
+                    width="24"
+                    height="24"
                     className="h-6 w-6"
                   />
                   <span className="text-xs">Home</span>

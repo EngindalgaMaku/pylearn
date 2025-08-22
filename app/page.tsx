@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 import type { Metadata } from "next"
+// no server headers/cookies needed; leaderboard loads client-side
 import Script from "next/script"
 import HomeClient from "@/components/home/HomeClient"
 import { prisma } from "@/lib/prisma"
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
   title: "PyLearn – Learn Python by Playing | Free Interactive Lessons, Quizzes, Games",
   description:
     "Master Python with interactive lessons, quizzes, and games. Personalized daily challenges, progress tracking, and leaderboards. Perfect for beginners and intermediate learners.",
-  alternates: { canonical: "/" },
+  alternates: { canonical: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000" },
   robots: {
     index: true,
     follow: true,
@@ -101,8 +102,12 @@ export default async function Page() {
   const nextPromise = getJson<{ success: boolean; next: ActivityItem | null }>("/api/learn/activities?status=next")
   const modulesPromise = getJson<{ success: boolean; items: ModulesSummaryItem[] }>("/api/learn/activities?group=modules")
   const tipPromise = getJson<{ tip?: any }>("/api/python-tips/random")
-
-  const [dailyRes, nextRes, modulesRes, tipRes] = await Promise.all([dailyPromise, nextPromise, modulesPromise, tipPromise])
+  const [dailyRes, nextRes, modulesRes, tipRes] = await Promise.all([
+    dailyPromise,
+    nextPromise,
+    modulesPromise,
+    tipPromise,
+  ])
 
   const dailyChallenge = dailyRes?.items?.[0] ?? null
   const nextLesson = nextRes?.next ?? null
@@ -132,6 +137,7 @@ export default async function Page() {
   }
 
   const tip = tipRes?.tip ?? null
+  const leaderboardCurrentUser = null
 
   // 2) Fetch a random non-lesson activity directly from DB (Activities page data model)
   let randomActivity: ActivityItem | null = null
@@ -191,6 +197,7 @@ export default async function Page() {
         modules={modules}
         tip={tip}
         randomActivity={randomActivity}
+        leaderboardCurrentUser={leaderboardCurrentUser}
       />
       <Script id="ld-home-website" type="application/ld+json" strategy="afterInteractive">
         {JSON.stringify({
@@ -216,6 +223,40 @@ export default async function Page() {
           name: "PyLearn",
           url: "/",
           logo: "/icon.png",
+          sameAs: [
+            "https://twitter.com/pylearnapp",
+            "https://facebook.com/pylearnapp",
+            "https://github.com/pylearnapp"
+          ]
+        })}
+      </Script>
+      <Script id="ld-home-course" type="application/ld+json" strategy="afterInteractive">
+        {JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Course",
+          name: "Learn Python Programming",
+          description: "Master Python with interactive lessons, quizzes, and games. Perfect for beginners and intermediate learners.",
+          provider: {
+            "@type": "Organization",
+            name: "PyLearn",
+            sameAs: "/"
+          },
+          hasCourseInstance: {
+            "@type": "CourseInstance",
+            courseMode: "online",
+            educationalLevel: "Beginner to Intermediate"
+          },
+          learningResourceType: "Interactive Resource",
+          teaches: "Python programming fundamentals, data structures, functions, control flow",
+          about: {
+            "@type": "Thing",
+            name: "Python Programming"
+          },
+          audience: {
+            "@type": "Audience",
+            audienceType: "Beginner and Intermediate Programmers"
+          },
+          isAccessibleForFree: true
         })}
       </Script>
     </>

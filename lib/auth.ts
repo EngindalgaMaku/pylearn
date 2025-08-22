@@ -194,7 +194,7 @@ export const authOptions: NextAuthOptions = {
       }
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session }) {
       if (user) {
         if (account?.provider === "google") {
           try {
@@ -230,6 +230,29 @@ export const authOptions: NextAuthOptions = {
           token.isPremium = (user as any).isPremium;
         }
       }
+
+      // Support client-side session.update(...) calls to refresh token values after DB changes
+      if (trigger === "update" && session) {
+        try {
+          // NextAuth may pass either { user: {...} } or flat fields depending on caller
+          const src: any = (session as any).user ?? (session as any);
+
+          if (src) {
+            if (typeof src.level !== "undefined") token.level = src.level;
+            if (typeof src.experience !== "undefined") token.experience = src.experience;
+            if (typeof src.currentDiamonds !== "undefined")
+              token.currentDiamonds = src.currentDiamonds;
+            if (typeof src.totalDiamonds !== "undefined")
+              token.totalDiamonds = src.totalDiamonds;
+            if (typeof src.loginStreak !== "undefined") token.loginStreak = src.loginStreak;
+            if (typeof src.maxLoginStreak !== "undefined") token.maxLoginStreak = src.maxLoginStreak;
+            if (typeof src.isPremium !== "undefined") token.isPremium = src.isPremium;
+          }
+        } catch (e) {
+          console.error("JWT update merge error:", e);
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {

@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import { ArrowLeft, Mail, MessageCircle, Phone } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -7,6 +10,45 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
 export default function ContactUs() {
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [email, setEmail] = useState("")
+  const [subject, setSubject] = useState("")
+  const [message, setMessage] = useState("")
+  const [website, setWebsite] = useState("") // honeypot
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+    setLoading(true)
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName, lastName, email, subject, message, website }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to send message")
+      }
+      setSuccess("Thanks! Your message has been sent.")
+      setFirstName("")
+      setLastName("")
+      setEmail("")
+      setSubject("")
+      setMessage("")
+      setWebsite("")
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -30,32 +72,47 @@ export default function ContactUs() {
               <CardDescription>We'll get back to you as soon as possible</CardDescription>
             </CardHeader>
             <CardContent>
-              <form className="space-y-4">
+              <form className="space-y-4" onSubmit={onSubmit}>
+                {success && (
+                  <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                    {success}
+                  </div>
+                )}
+                {error && (
+                  <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                    {error}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" placeholder="John" />
+                    <Input id="firstName" placeholder="John" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
                   </div>
                   <div>
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" placeholder="Doe" />
+                    <Input id="lastName" placeholder="Doe" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
                   </div>
                 </div>
                 <div>
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="john@example.com" />
+                  <Input id="email" type="email" placeholder="john@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
                 <div>
                   <Label htmlFor="subject">Subject</Label>
-                  <Input id="subject" placeholder="How can we help?" />
+                  <Input id="subject" placeholder="How can we help?" value={subject} onChange={(e) => setSubject(e.target.value)} required />
                 </div>
                 <div>
                   <Label htmlFor="message">Message</Label>
-                  <Textarea id="message" placeholder="Tell us more about your question or feedback..." rows={5} />
+                  <Textarea id="message" placeholder="Tell us more about your question or feedback..." rows={5} value={message} onChange={(e) => setMessage(e.target.value)} required />
                 </div>
-                <Button className="w-full bg-red-600 hover:bg-red-700">
+                {/* Honeypot field (hidden) */}
+                <div className="hidden" aria-hidden="true">
+                  <Label htmlFor="website">Website</Label>
+                  <Input id="website" value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" />
+                </div>
+                <Button disabled={loading} className="w-full bg-red-600 hover:bg-red-700">
                   <MessageCircle className="w-4 h-4 mr-2" />
-                  Send Message
+                  {loading ? "Sending..." : "Send Message"}
                 </Button>
               </form>
             </CardContent>
@@ -73,7 +130,7 @@ export default function ContactUs() {
                   <Mail className="w-5 h-5 text-red-600" />
                   <div>
                     <p className="font-medium">Email Support</p>
-                    <p className="text-sm text-gray-600">support@pylearn.com</p>
+                    <p className="text-sm text-gray-600">info@pylearn.net</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">

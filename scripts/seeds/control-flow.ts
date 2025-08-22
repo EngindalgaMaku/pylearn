@@ -437,27 +437,147 @@ const lessons: LessonSeed[] = [
   }
 ]
 
+/**
+* Build a small question bank per category and pad to minimum 5 questions.
+*/
+function getGenericQuestionBank(category: string) {
+ const lower = (category || "").toLowerCase();
+ if (lower.includes("control")) {
+   return [
+     {
+       type: "multiple_choice",
+       question: "Which statement repeats a block while a condition is true?",
+       options: ["if", "for", "while", "match"],
+       correctAnswer: 2,
+       explanation: "while repeats as long as the condition is true."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which operator performs logical AND in Python?",
+       options: ["&&", "and", "&", "AND()"],
+       correctAnswer: 1,
+       explanation: "Python uses 'and' for logical conjunction."
+     },
+     {
+       type: "multiple_choice",
+       question: "In an if/elif/else chain, how many branches run?",
+       options: ["All true ones", "At most one", "At least one", "None ever"],
+       correctAnswer: 1,
+       explanation: "Only the first condition that evaluates to true will run."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which loop keyword skips to the next iteration?",
+       options: ["skip", "pass", "continue", "next"],
+       correctAnswer: 2,
+       explanation: "continue jumps to the next iteration of the loop."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which code prints 'negative' if n < 0, otherwise 'non-negative'?",
+       options: [
+         "if n < 0: print('negative') else: print('non-negative')",
+         "if n < 0: print('negative')\nelse: print('non-negative')",
+         "if (n < 0) print('negative') else print('non-negative')",
+         "print('negative' if n < 0 else 'non-negative')  # invalid"
+       ],
+       correctAnswer: 1,
+       explanation: "Python requires a newline before else, indented at the same level."
+     },
+     {
+       type: "multiple_choice",
+       question: "What’s the typical indentation width recommended by PEP 8?",
+       options: ["2", "4", "8", "Tab only"],
+       correctAnswer: 1,
+       explanation: "PEP 8 recommends 4 spaces per indentation level."
+     }
+   ];
+ }
+ // Fallback generic
+ return [
+   {
+     type: "multiple_choice",
+     question: "Which keyword starts a conditional block?",
+     options: ["when", "if", "case", "cond"],
+     correctAnswer: 1,
+     explanation: "Use 'if' to start a conditional block."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which operator is logical OR?",
+     options: ["||", "or", "|", "OR()"],
+     correctAnswer: 1,
+     explanation: "Python uses 'or' for logical disjunction."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which keyword exits a loop immediately?",
+     options: ["exit", "stop", "break", "return"],
+     correctAnswer: 2,
+     explanation: "break terminates the loop immediately."
+   },
+   {
+     type: "multiple_choice",
+     question: "Short-circuiting means:",
+     options: [
+       "Python evaluates both operands anyway",
+       "Evaluation stops as soon as the result is determined",
+       "It’s about CPU throttling",
+       "It’s about memory management"
+     ],
+     correctAnswer: 1,
+     explanation: "and/or short-circuit evaluation stops early when possible."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which line is a valid ternary (conditional expression)?",
+     options: [
+       "a = if x else y",
+       "a = (x ? y : z)",
+       "a = y if x else z",
+       "a = ternary(x, y, z)"
+     ],
+     correctAnswer: 2,
+     explanation: "Python uses: value_if_true if condition else value_if_false."
+   }
+ ];
+}
+
+function ensureFiveQuestions(content: any, category: string) {
+ const out = { ...(content || {}) };
+ const quiz = out.quiz ?? { questions: [] };
+ const list = Array.isArray(quiz.questions) ? quiz.questions.slice() : [];
+ const bank = getGenericQuestionBank(category);
+ let i = 0;
+ while (list.length < 5) {
+   list.push(bank[i % bank.length]);
+   i++;
+ }
+ out.quiz = { questions: list };
+ return out;
+}
+
 // Helper to build createMany records
 function buildCreateMany() {
-  return lessons.map((l) => ({
-    title: l.title,
-    slug: l.slug,
-    description: l.description,
-    category: l.category,
-    difficulty: l.difficulty,
-    estimatedMinutes: l.estimatedMinutes,
-    diamondReward: l.diamondReward,
-    experienceReward: l.experienceReward,
-    sortOrder: l.sortOrder,
-    topicOrder: l.topicOrder,
-    isActive: true,
-    isLocked: false,
-    activityType: "lesson",
-    // Content is string JSON consumed by the app parser
-    content: JSON.stringify(l.content),
-    createdAt: now(),
-    updatedAt: now()
-  }))
+ return lessons.map((l) => ({
+   title: l.title,
+   slug: l.slug,
+   description: l.description,
+   category: l.category,
+   difficulty: l.difficulty,
+   estimatedMinutes: l.estimatedMinutes,
+   diamondReward: l.diamondReward,
+   experienceReward: l.experienceReward,
+   sortOrder: l.sortOrder,
+   topicOrder: l.topicOrder,
+   isActive: true,
+   isLocked: false,
+   activityType: "lesson",
+   // Content is string JSON consumed by the app parser (ensure >=5 questions)
+   content: JSON.stringify(ensureFiveQuestions(l.content, l.category)),
+   createdAt: now(),
+   updatedAt: now()
+ }))
 }
 
 async function main() {

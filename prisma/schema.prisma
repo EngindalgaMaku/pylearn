@@ -185,11 +185,13 @@ model User {
   dailyQuests           DailyQuest[]
   diamondPurchases      DiamondPurchase[]
   diamondTransactions   DiamondTransaction[]
+  gameSessions          GameSession[]
   loginHistory          LoginHistory[]
   loginStreakData       LoginStreak?
   pythonTipFeedback     PythonTipFeedback[]
   pythonTipStreak       PythonTipStreak?
   quizAttempts          QuizAttempt[]
+  recommendationQueues  RecommendationQueue[]
   sessions              Session[]
   badges                UserBadge[]
   userCards             UserCard[]
@@ -197,10 +199,9 @@ model User {
   dailyLogin            UserDailyLogin?
   pythonTipInteractions UserPythonTipInteraction[]
   rarityStats           UserRarityStats?
+  skillMasteries        UserSkillMastery[]
   userStreak            UserStreak?
   xpEventParticipations XPEventParticipation[]
-  skillMasteries        UserSkillMastery[]
-  recommendationQueues  RecommendationQueue[]
 
   @@map("users")
 }
@@ -336,9 +337,9 @@ model Badge {
   specialReward       String?
   targetValue         Int         @default(1)
   totalProgress       Int         @default(0)
+  rules               BadgeRule[]
   prerequisite        Badge?      @relation("BadgePrerequisites", fields: [prerequisiteBadgeId], references: [id])
   dependentBadges     Badge[]     @relation("BadgePrerequisites")
-  rules               BadgeRule[]
   users               UserBadge[]
 
   @@map("badges")
@@ -744,7 +745,6 @@ model DiamondPackage {
 model LearningActivity {
   id                  String             @id @default(cuid())
   title               String
-  slug                String?            @unique
   description         String?
   activityType        String
   category            String             @default("general")
@@ -762,6 +762,7 @@ model LearningActivity {
   isLocked            Boolean            @default(true)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+  slug                String?            @unique
   attempts            ActivityAttempt[]
   activitySkills      ActivitySkill[]
   prerequisite        LearningActivity?  @relation("ActivityPrerequisites", fields: [prerequisiteId], references: [id])
@@ -1240,148 +1241,145 @@ model BlogPostInteraction {
 }
 
 model ArenaConfiguration {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  isActive    Boolean  @default(true)
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  difficultyConfigs   ArenaDifficultyConfig[]
-  categoryConfigs     ArenaCategoryConfig[]
+  id                  String                    @id @default(cuid())
+  name                String                    @unique
+  description         String?
+  isActive            Boolean                   @default(true)
+  isDefault           Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
   activityTypeConfigs ArenaActivityTypeConfig[]
-  uiConfig           ArenaUIConfig?
+  categoryConfigs     ArenaCategoryConfig[]
+  difficultyConfigs   ArenaDifficultyConfig[]
+  uiConfig            ArenaUIConfig?
 
   @@map("arena_configurations")
 }
 
 model ArenaDifficultyConfig {
-  id          String              @id @default(cuid())
+  id          String             @id @default(cuid())
   configId    String
   level       Int
   label       String
-  color       String              @default("from-slate-500 to-slate-600")
-  icon        String              @default("💻")
-  bgColor     String              @default("bg-slate-50")
-  textColor   String              @default("text-slate-700")
-  borderColor String              @default("border-slate-200")
-  sortOrder   Int                 @default(0)
-  isActive    Boolean             @default(true)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  config      ArenaConfiguration  @relation(fields: [configId], references: [id], onDelete: Cascade)
+  color       String             @default("from-slate-500 to-slate-600")
+  icon        String             @default("💻")
+  bgColor     String             @default("bg-slate-50")
+  textColor   String             @default("text-slate-700")
+  borderColor String             @default("border-slate-200")
+  sortOrder   Int                @default(0)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  config      ArenaConfiguration @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@unique([configId, level])
   @@map("arena_difficulty_configs")
 }
 
 model ArenaCategoryConfig {
-  id          String              @id @default(cuid())
+  id          String             @id @default(cuid())
   configId    String
   key         String
   title       String
   description String
-  icon        String              @default("💻")
-  gradient    String              @default("from-slate-500 to-slate-600")
-  bgGradient  String              @default("from-slate-50 to-slate-50")
-  iconBg      String              @default("bg-slate-500")
-  sortOrder   Int                 @default(0)
-  isActive    Boolean             @default(true)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  config      ArenaConfiguration  @relation(fields: [configId], references: [id], onDelete: Cascade)
+  icon        String             @default("💻")
+  gradient    String             @default("from-slate-500 to-slate-600")
+  bgGradient  String             @default("from-slate-50 to-slate-50")
+  iconBg      String             @default("bg-slate-500")
+  sortOrder   Int                @default(0)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  config      ArenaConfiguration @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@unique([configId, key])
   @@map("arena_category_configs")
 }
 
 model ArenaActivityTypeConfig {
-  id          String              @id @default(cuid())
+  id          String             @id @default(cuid())
   configId    String
   type        String
   name        String
-  icon        String              @default("💻")
-  color       String              @default("text-slate-600")
+  icon        String             @default("💻")
+  color       String             @default("text-slate-600")
   description String?
-  isActive    Boolean             @default(true)
-  sortOrder   Int                 @default(0)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  config      ArenaConfiguration  @relation(fields: [configId], references: [id], onDelete: Cascade)
+  isActive    Boolean            @default(true)
+  sortOrder   Int                @default(0)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  config      ArenaConfiguration @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@unique([configId, type])
   @@map("arena_activity_type_configs")
 }
 
 model ArenaUIConfig {
-  id               String              @id @default(cuid())
-  configId         String              @unique
-  heroTitle        String              @default("Master Programming")
-  heroSubtitle     String              @default("Through Epic Learning")
-  heroDescription  String              @default("Embark on an epic coding adventure with interactive challenges, unlock achievements, and build world-class programming skills!")
-  primaryColor     String              @default("#6366f1")
-  secondaryColor   String              @default("#ec4899")
-  accentColor      String              @default("#06b6d4")
-  backgroundColor  String              @default("from-indigo-50 via-white to-cyan-50")
-  headerGradient   String              @default("from-indigo-600 via-purple-600 to-pink-600")
+  id               String             @id @default(cuid())
+  configId         String             @unique
+  heroTitle        String             @default("Master Programming")
+  heroSubtitle     String             @default("Through Epic Learning")
+  heroDescription  String             @default("Embark on an epic coding adventure with interactive challenges, unlock achievements, and build world-class programming skills!")
+  primaryColor     String             @default("#6366f1")
+  secondaryColor   String             @default("#ec4899")
+  accentColor      String             @default("#06b6d4")
+  backgroundColor  String             @default("from-indigo-50 via-white to-cyan-50")
+  headerGradient   String             @default("from-indigo-600 via-purple-600 to-pink-600")
   customCSS        String?
-  showStats        Boolean             @default(true)
-  showFilters      Boolean             @default(true)
-  enableAnimations Boolean             @default(true)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  config           ArenaConfiguration  @relation(fields: [configId], references: [id], onDelete: Cascade)
+  showStats        Boolean            @default(true)
+  showFilters      Boolean            @default(true)
+  enableAnimations Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  config           ArenaConfiguration @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@map("arena_ui_configs")
 }
 
 model BadgeRule {
-  id             String   @id @default(cuid())
-  badgeId        String
-  ruleType       String
-  metric         String
-  target         Int?
-  weight         Float    @default(1)
-  definition     Json?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  badge          Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  badgeId    String
+  ruleType   String
+  metric     String
+  target     Int?
+  weight     Float    @default(1)
+  definition Json?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  badge      Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@index([badgeId])
   @@map("badge_rules")
 }
 
 model Skill {
-  id            String             @id @default(cuid())
-  key           String             @unique
-  name          String
-  description   String?
-  category      String?
-  difficulty    Int                @default(1)
-  isActive      Boolean            @default(true)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-
-  parents       SkillEdge[]        @relation("SkillPrereqParent")
-  children      SkillEdge[]        @relation("SkillPrereqChild")
-  activities    ActivitySkill[]
-  userMastery   UserSkillMastery[]
+  id          String             @id @default(cuid())
+  key         String             @unique
+  name        String
+  description String?
+  category    String?
+  difficulty  Int                @default(1)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  activities  ActivitySkill[]
+  children    SkillEdge[]        @relation("SkillPrereqChild")
+  parents     SkillEdge[]        @relation("SkillPrereqParent")
+  userMastery UserSkillMastery[]
 
   @@map("skills")
 }
 
 model SkillEdge {
-  id              String   @id @default(cuid())
-  parentId        String
-  childId         String
-  weight          Float    @default(1.0)
-  isPrerequisite  Boolean  @default(true)
-  createdAt       DateTime @default(now())
-
-  parent          Skill    @relation("SkillPrereqParent", fields: [parentId], references: [id], onDelete: Cascade)
-  child           Skill    @relation("SkillPrereqChild", fields: [childId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  parentId       String
+  childId        String
+  weight         Float    @default(1.0)
+  isPrerequisite Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  child          Skill    @relation("SkillPrereqChild", fields: [childId], references: [id], onDelete: Cascade)
+  parent         Skill    @relation("SkillPrereqParent", fields: [parentId], references: [id], onDelete: Cascade)
 
   @@unique([parentId, childId])
   @@index([childId])
@@ -1389,15 +1387,14 @@ model SkillEdge {
 }
 
 model ActivitySkill {
-  id          String             @id @default(cuid())
-  activityId  String
-  skillId     String
-  weight      Float              @default(1.0)
-  difficulty  Int                @default(1)
-  createdAt   DateTime           @default(now())
-
-  activity    LearningActivity   @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  skill       Skill              @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  id         String           @id @default(cuid())
+  activityId String
+  skillId    String
+  weight     Float            @default(1.0)
+  difficulty Int              @default(1)
+  createdAt  DateTime         @default(now())
+  activity   LearningActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  skill      Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@unique([activityId, skillId])
   @@index([skillId])
@@ -1419,9 +1416,8 @@ model UserSkillMastery {
   lastDecayAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   skill           Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, skillId])
   @@index([skillId])
@@ -1439,4 +1435,20 @@ model RecommendationQueue {
 
   @@index([userId, generatedAt])
   @@map("recommendation_queues")
+}
+
+model GameSession {
+  id           String    @id @default(cuid())
+  userId       String
+  gameKey      String
+  score        Int       @default(0)
+  correctCount Int       @default(0)
+  durationSec  Int       @default(0)
+  bonusXP      Int       @default(0)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt  DateTime? @db.Timestamptz(6)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId, gameKey, createdAt])
+  @@map("game_sessions")
 }

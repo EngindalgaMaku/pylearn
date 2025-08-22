@@ -379,26 +379,151 @@ const lessons: LessonSeed[] = [
   }
 ]
 
+/**
+* Build a small question bank per category and pad to minimum 5 questions.
+*/
+function getGenericQuestionBank(category: string) {
+ const lower = (category || "").toLowerCase();
+ if (lower.includes("function")) {
+   return [
+     {
+       type: "multiple_choice",
+       question: "Which keyword defines a function?",
+       options: ["func", "def", "function", "lambda only"],
+       correctAnswer: 1,
+       explanation: "Use 'def' to define a named function."
+     },
+     {
+       type: "multiple_choice",
+       question: "What is the difference between parameters and arguments?",
+       options: [
+         "None; same thing",
+         "Parameters are placeholders in definition; arguments are values at call site",
+         "Arguments are placeholders; parameters are values",
+         "Parameters only apply to classes"
+       ],
+       correctAnswer: 1,
+       explanation: "Parameters in the definition receive arguments at the call site."
+     },
+     {
+       type: "multiple_choice",
+       question: "What does a function return when there is no return statement?",
+       options: ["0", "False", "None", "''"],
+       correctAnswer: 2,
+       explanation: "Python returns None implicitly."
+     },
+     {
+       type: "multiple_choice",
+       question: "What do *args and **kwargs collect?",
+       options: [
+         "Positional and keyword arguments, respectively",
+         "Only keyword arguments",
+         "Only positional arguments",
+         "Local variables"
+       ],
+       correctAnswer: 0,
+       explanation: "*args packs extra positionals (tuple), **kwargs packs extra keywords (dict)."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which is true about lambda?",
+       options: [
+         "Supports multiple statements",
+         "May contain loops directly",
+         "Has an expression-only body",
+         "Is faster than def by definition"
+       ],
+       correctAnswer: 2,
+       explanation: "lambda bodies are single expressions; use def for complex logic."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which comes first in the LEGB name resolution order?",
+       options: ["Global", "Local", "Built-in", "Enclosing"],
+       correctAnswer: 1,
+       explanation: "LEGB stands for Local, Enclosing, Global, Built-in."
+     }
+   ];
+ }
+ // Fallback generic
+ return [
+   {
+     type: "multiple_choice",
+     question: "Which keyword is used to exit a function early?",
+     options: ["stop", "break", "return", "exit()"],
+     correctAnswer: 2,
+     explanation: "Use return to leave the function immediately."
+   },
+   {
+     type: "multiple_choice",
+     question: "Where are default parameter values evaluated?",
+     options: ["At runtime on each call", "At definition time once", "Only on import", "Never"],
+     correctAnswer: 1,
+     explanation: "Defaults evaluate once at function definition time."
+   },
+   {
+     type: "multiple_choice",
+     question: "What structure is best to return multiple values?",
+     options: ["List", "Tuple", "Set", "String"],
+     correctAnswer: 1,
+     explanation: "Returning a tuple is idiomatic; the caller can unpack."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which argument style improves readability when many parameters exist?",
+     options: ["Only positional args", "Only *args", "Keyword args", "Only **kwargs"],
+     correctAnswer: 2,
+     explanation: "Keyword args make intent explicit."
+   },
+   {
+     type: "multiple_choice",
+     question: "What does nonlocal affect?",
+     options: [
+       "Global names only",
+       "Binding in an enclosing (but not global) scope",
+       "Built-in names",
+       "No effect"
+     ],
+     correctAnswer: 1,
+     explanation: "nonlocal rebinds a name found in an enclosing function scope."
+   }
+ ];
+}
+
+function ensureFiveQuestions(content: any, category: string) {
+ const out = { ...(content || {}) };
+ const quiz = out.quiz ?? { questions: [] };
+ const list = Array.isArray(quiz.questions) ? quiz.questions.slice() : [];
+ const bank = getGenericQuestionBank(category);
+ let i = 0;
+ while (list.length < 5) {
+   list.push(bank[i % bank.length]);
+   i++;
+ }
+ out.quiz = { questions: list };
+ return out;
+}
+
 // Helper to build createMany records
 function buildCreateMany() {
-  return lessons.map((l) => ({
-    title: l.title,
-    description: l.description,
-    category: l.category,
-    difficulty: l.difficulty,
-    estimatedMinutes: l.estimatedMinutes,
-    diamondReward: l.diamondReward,
-    experienceReward: l.experienceReward,
-    sortOrder: l.sortOrder,
-    topicOrder: l.topicOrder,
-    isActive: true,
-    isLocked: false,
-    activityType: "lesson",
-    // Content is string JSON consumed by the app parser
-    content: JSON.stringify(l.content),
-    createdAt: now(),
-    updatedAt: now()
-  }))
+ return lessons.map((l) => ({
+   title: l.title,
+   description: l.description,
+   category: l.category,
+   difficulty: l.difficulty,
+   estimatedMinutes: l.estimatedMinutes,
+   diamondReward: l.diamondReward,
+   experienceReward: l.experienceReward,
+   sortOrder: l.sortOrder,
+   topicOrder: l.topicOrder,
+   isActive: true,
+   isLocked: false,
+   activityType: "lesson",
+   // Content is string JSON consumed by the app parser (ensure >= 5 questions)
+   content: JSON.stringify(ensureFiveQuestions(l.content, l.category)),
+   createdAt: now(),
+   updatedAt: now()
+ }))
 }
 
 async function main() {

@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { ArrowLeft, ShoppingCart, Sparkles, Star, Shield, Zap, Sword, ChevronDown, ChevronUp, X } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { toast } from "@/hooks/use-toast"
 
 type RarityBucket =
   | "Common"
@@ -191,8 +193,10 @@ function normalizeRarityBucket(r: string | undefined | null): RarityBucket {
 }
 
 export default function ShopPage() {
-  const [userDiamonds, setUserDiamonds] = useState(450) // Mock user diamonds
-  const [ownedCards, setOwnedCards] = useState<string[]>(["pikachu-1"]) // Mock owned cards
+  const { data: session, update } = useSession()
+  const [userDiamonds, setUserDiamonds] = useState<number | null>(null)
+  const [ownedCards, setOwnedCards] = useState<string[]>([])
+  const [purchaseLoadingId, setPurchaseLoadingId] = useState<string | null>(null)
   const categories: { value: CategorySlug; label: string }[] = [
     { value: "anime-collection", label: "Anime Collection" },
     { value: "star-collection", label: "Star Collection" },
@@ -266,6 +270,32 @@ export default function ShopPage() {
     }
   }, [])
 
+  // Initialize diamonds from session (when available)
+  useEffect(() => {
+    const cd = (session?.user as any)?.currentDiamonds
+    if (typeof cd === "number") setUserDiamonds(cd)
+  }, [session])
+
+  // Load owned card ids for current user
+  useEffect(() => {
+    let cancelled = false
+    async function loadOwned() {
+      try {
+        const res = await fetch("/api/user/cards", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled && Array.isArray(data.items)) setOwnedCards(data.items)
+      } catch {
+        // ignore
+      }
+    }
+    // only fetch when we have a session (authenticated)
+    if (session?.user) loadOwned()
+    return () => {
+      cancelled = true
+    }
+  }, [session])
+
   useEffect(() => {
     setLoading(true)
     setError(null)
@@ -294,11 +324,54 @@ export default function ShopPage() {
 
   const filteredCards = cards
 
-  const handlePurchase = (card: ShopCard) => {
-    if (userDiamonds >= card.price && !ownedCards.includes(card.id)) {
-      setUserDiamonds((prev) => prev - card.price)
-      setOwnedCards((prev) => [...prev, card.id])
-      // Add purchase animation/notification here
+  const handlePurchase = async (card: ShopCard) => {
+    if (purchaseLoadingId) return
+    const canAfford = (userDiamonds ?? 0) >= card.price
+    if (ownedCards.includes(card.id)) {
+      toast({ title: "Already owned", description: `You already own ${card.name}.` })
+      return
+    }
+    if (!canAfford) {
+      toast({
+        title: "Not enough diamonds",
+        description: "Earn more diamonds in Activities to buy this card.",
+        variant: "destructive",
+      } as any)
+      return
+    }
+    try {
+      setPurchaseLoadingId(card.id)
+      const res = await fetch("/api/cards/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: card.id }),
+      })
+      if (!res.ok) {
+        let msg = "Purchase failed. Please try again."
+        try {
+          const err = await res.json()
+          if (err?.error) msg = err.error
+        } catch {}
+        toast({ title: "Purchase failed", description: msg, variant: "destructive" } as any)
+        return
+      }
+      const data = await res.json()
+      const newDiamonds = data?.currentDiamonds
+      if (typeof newDiamonds === "number") {
+        setUserDiamonds(newDiamonds)
+        // propagate to session so other parts of app update
+        try {
+          await update?.({ user: { currentDiamonds: newDiamonds } } as any)
+        } catch {
+          // ignore
+        }
+      }
+      setOwnedCards((prev) => (prev.includes(card.id) ? prev : [...prev, card.id]))
+      toast({ title: "Purchased", description: `${card.name} added to your collection! 💎` })
+    } catch (e) {
+      toast({ title: "Network error", description: "Could not complete purchase.", variant: "destructive" } as any)
+    } finally {
+      setPurchaseLoadingId(null)
     }
   }
 
@@ -330,7 +403,7 @@ export default function ShopPage() {
                   <Sparkles className="w-6 h-6 text-yellow-600" />
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-yellow-800">{userDiamonds} 💎</p>
+                  <p className="text-lg font-bold text-yellow-800">{typeof userDiamonds === "number" ? userDiamonds : "—"} 💎</p>
                   <p className="text-sm text-yellow-600">Available Diamonds</p>
                 </div>
               </div>
@@ -384,7 +457,7 @@ export default function ShopPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
             {filteredCards.map((card) => {
               const isOwned = ownedCards.includes(card.id)
-              const canAfford = userDiamonds >= card.price
+              const canAfford = (userDiamonds ?? 0) >= card.price
               const displayRarity = (card.rarity ?? "Common").toString().trim()
               const bucket = normalizeRarityBucket(card.rarity as string)
               const rs = rarityStyles[bucket] ?? rarityStyles["Common"]
@@ -497,7 +570,7 @@ export default function ShopPage() {
                     <div className="flex items-center justify-end">
                       <Button
                         onClick={() => handlePurchase(card)}
-                        disabled={isOwned || !canAfford}
+                        disabled={isOwned || !canAfford || purchaseLoadingId === card.id}
                         size="sm"
                         className={`${isOwned ? "bg-green-500 hover:bg-green-600" : ""}`}
                       >
@@ -505,6 +578,8 @@ export default function ShopPage() {
                           <>✓ Owned</>
                         ) : !canAfford ? (
                           <>💎 Need More</>
+                        ) : purchaseLoadingId === card.id ? (
+                          <>Processing…</>
                         ) : (
                           <>
                             <ShoppingCart className="w-4 h-4 mr-1" />

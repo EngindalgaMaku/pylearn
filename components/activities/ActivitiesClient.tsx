@@ -346,7 +346,39 @@ export default function ActivitiesClient({
           </div>
 
           {/* Topic Filter */}
-          <div className="flex flex-wrap gap-3 mb-6">
+          {/* Mobile: horizontal scroll chips with snap */}
+          <div className="md:hidden mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-primary" />
+                <h3 className="font-serif font-semibold text-lg text-foreground">Topics</h3>
+              </div>
+              <span className="text-xs text-muted-foreground">{topicList.length} topics</span>
+            </div>
+            <div className="-mx-4 px-4 overflow-x-auto">
+              <div className="flex gap-2 snap-x snap-mandatory">
+                {topicList.map((topic) => (
+                  <Button
+                    key={topic.id}
+                    asChild
+                    size="sm"
+                    variant={selectedTopic === topic.id ? "default" : "outline"}
+                    className={`font-medium min-w-max snap-start whitespace-nowrap ${selectedTopic === topic.id ? "" : "bg-card"}`}
+                  >
+                    <Link href={buildHref(topic.id, selectedActivityType, 1)}>
+                      <span className="inline-flex items-center gap-2">
+                        {topicIconFor(topic.title)}
+                        <span>{topic.title}</span>
+                      </span>
+                    </Link>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop: wrapped chip grid */}
+          <div className="hidden md:flex flex-wrap gap-3 mb-6">
             {topicList.map((topic) => (
               <Button key={topic.id} asChild variant={selectedTopic === topic.id ? "default" : "outline"} className="font-medium">
                 <Link href={buildHref(topic.id, selectedActivityType, 1)}>
@@ -404,9 +436,9 @@ export default function ActivitiesClient({
             return (
               <Card
                 key={activity.id}
-                className={`hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
+                className={`relative hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${
                   activity.isLocked ? "opacity-60" : ""
-                } border-border/50 bg-card/80 backdrop-blur-sm`}
+                } ${activity.isCompleted ? "border-green-300 bg-green-50" : "border-border/50 bg-card/80"} backdrop-blur-sm`}
               >
                 <CardHeader className="pb-4">
                   <div className="flex items-start justify-between mb-3">
@@ -422,7 +454,7 @@ export default function ActivitiesClient({
                       </div>
                       <CardTitle className="font-serif font-bold text-lg flex items-center gap-2 text-foreground">
                         {activity.title}
-                        {activity.isCompleted && <CheckCircle className="w-5 h-5 text-green-500" />}
+                        {activity.isCompleted && <CheckCircle className="w-5 h-5 text-green-600" />}
                         {activity.isLocked && <Lock className="w-5 h-5 text-muted-foreground" />}
                       </CardTitle>
                       {activity.description && (
@@ -430,6 +462,12 @@ export default function ActivitiesClient({
                       )}
                     </div>
                   </div>
+                  {activity.isCompleted && (
+                    <div className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-1 text-xs font-medium border border-green-300">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>Completed</span>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -462,16 +500,28 @@ export default function ActivitiesClient({
                       </div>
                     )}
 
-                    <Button className="w-full font-medium shadow-sm" disabled={activity.isLocked} asChild={!activity.isLocked} variant={activity.isCompleted ? "outline" : "default"}>
+                    <Button
+                      className={`w-full font-medium shadow-sm ${
+                        activity.isCompleted
+                          ? "bg-amber-100 text-amber-900 hover:bg-amber-200 border-amber-300"
+                          : ""
+                      }`}
+                      disabled={activity.isLocked}
+                      asChild={!activity.isLocked}
+                      variant={activity.isCompleted ? "outline" : "default"}
+                    >
                       {activity.isLocked ? (
                         <>
                           <Lock className="w-4 h-4 mr-2" />
                           Locked
                         </>
                       ) : (
-                        <Link href={`/activities/${activity.slug}`}>
+                        <Link href={`/activities/${activity.slug}?${new URLSearchParams({
+                          ...(selectedTopic ? { category: selectedTopic } : {}),
+                          ...(selectedActivityType ? { type: selectedActivityType } : {}),
+                        }).toString()}`}>
                           <Play className="w-4 h-4 mr-2" />
-                          {activity.isCompleted ? "Play Again" : "Start Activity"}
+                          {activity.isCompleted ? "Review" : "Start"}
                         </Link>
                       )}
                     </Button>

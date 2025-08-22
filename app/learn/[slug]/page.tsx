@@ -170,21 +170,72 @@ function normalizeSections(arr: any[]): LessonContent["sections"] {
   return sections
 }
 
-function extractQuiz(parsed: any): LessonContent["quiz"] | undefined {
+function parseQuizMultiple(parsed: any):
+  | { questions: { question: string; options: string[]; correctAnswer: number; explanation?: string }[] }
+  | undefined {
   const q = parsed?.quiz || parsed?.content?.quiz
+
+  // Preferred: q.questions as an array of question objects
+  if (q?.questions && Array.isArray(q.questions) && q.questions.length > 0) {
+    const questions = q.questions.map((first: any) => {
+      const question = String(first?.question ?? "Quiz")
+      // true/false variant handling
+      if (
+        first?.type === "true_false" ||
+        typeof first?.correctAnswer === "boolean"
+      ) {
+        const correct = !!first?.correctAnswer
+        return {
+          question,
+          options: ["True", "False"],
+          correctAnswer: correct ? 0 : 1,
+          explanation: first?.explanation ? String(first.explanation) : undefined,
+        }
+      }
+
+      const options = (first?.options ?? []).map((o: any) => String(typeof o === "string" ? o : o?.text ?? o))
+      let correctIndex = 0
+      if (typeof first?.correctAnswer === "number") {
+        correctIndex = Math.max(0, Math.min(options.length - 1, first.correctAnswer))
+      } else if (typeof first?.correctAnswer === "string") {
+        const idx = options.findIndex((o: string) => o === first.correctAnswer)
+        correctIndex = idx >= 0 ? idx : 0
+      } else if (typeof first?.correctIndex === "number") {
+        correctIndex = Math.max(0, Math.min(options.length - 1, first.correctIndex))
+      }
+      return {
+        question,
+        options: options.length ? options : ["A", "B"],
+        correctAnswer: correctIndex,
+        explanation: first?.explanation ? String(first.explanation) : undefined,
+      }
+    })
+
+    return { questions }
+  }
+
+  // Legacy single question shape -> wrap as array
   if (q && Array.isArray(q.options)) {
+    const question = String(q.question ?? "Quiz")
+    const options = q.options.map((o: any) => String(typeof o === "string" ? o : o?.text ?? o))
+    const correctAnswer =
+      typeof q.correctAnswer === "number"
+        ? q.correctAnswer
+        : typeof q.correctIndex === "number"
+          ? q.correctIndex
+          : 0
     return {
-      question: String(q.question ?? "Quiz"),
-      options: q.options.map((o: any) => String(typeof o === "string" ? o : o?.text ?? o)),
-      correctAnswer:
-        typeof q.correctAnswer === "number"
-          ? q.correctAnswer
-          : typeof q.correctIndex === "number"
-            ? q.correctIndex
-            : 0,
-      explanation: q.explanation ? String(q.explanation) : undefined,
+      questions: [
+        {
+          question,
+          options,
+          correctAnswer,
+          explanation: q.explanation ? String(q.explanation) : undefined,
+        },
+      ],
     }
   }
+
   return undefined
 }
 
@@ -221,46 +272,8 @@ function parseToFiveSections(raw: string | null | undefined): LessonContent {
     return text.replace(/```[\s\S]*?```/gm, "").trim()
   }
 
-  // Normalize quiz for viewer (single-question)
-  const normalizeQuizSingle = (parsed: any): LessonContent["quiz"] | undefined => {
-    // Prefer "questions" array if present (multiple questions) -> take first as a simple quiz
-    const q = parsed?.quiz
-    if (q?.questions && Array.isArray(q.questions) && q.questions.length > 0) {
-      const first = q.questions[0]
-      const question = String(first?.question ?? "Quiz")
-      // true/false
-      if (
-        first?.type === "true_false" ||
-        typeof first?.correctAnswer === "boolean"
-      ) {
-        const correct = !!first?.correctAnswer
-        return {
-          question,
-          options: ["True", "False"],
-          correctAnswer: correct ? 0 : 1,
-          explanation: first?.explanation ? String(first.explanation) : undefined,
-        }
-      }
-      // multiple choice
-      const options = (first?.options ?? []).map((o: any) => String(o))
-      let correctIndex = 0
-      if (typeof first?.correctAnswer === "number") {
-        correctIndex = Math.max(0, Math.min(options.length - 1, first.correctAnswer))
-      } else if (typeof first?.correctAnswer === "string") {
-        const idx = options.findIndex((o: string) => o === first.correctAnswer)
-        correctIndex = idx >= 0 ? idx : 0
-      }
-      return {
-        question,
-        options: options.length ? options : ["A", "B"],
-        correctAnswer: correctIndex,
-        explanation: first?.explanation ? String(first.explanation) : undefined,
-      }
-    }
-
-    // Otherwise fall back to legacy shape handler
-    return extractQuiz(parsed)
-  }
+  // Multi-question quiz support
+  const normalizeQuizSingle = (_parsed: any) => undefined // deprecated
 
   if (!raw) {
     return {
@@ -333,14 +346,14 @@ function parseToFiveSections(raw: string | null | undefined): LessonContent {
           { title: "Best Practices & References", content: lastContent, codeExample: cheat ?? undefined },
         ]
 
-        const quiz = normalizeQuizSingle(parsed)
+        const quiz = parseQuizMultiple(parsed)
         return quiz ? { sections, quiz } : { sections }
       }
 
       // 2) interactive steps[] → first 5 sections
       const steps = parsed?.steps || parsed?.content?.steps
       if (Array.isArray(steps) && steps.length > 0) {
-        const quiz = extractQuiz(parsed)
+        const quiz = parseQuizMultiple(parsed)
         return { sections: toFiveSectionsFromSteps(steps), ...(quiz ? { quiz } : {}) }
       }
 
@@ -349,7 +362,7 @@ function parseToFiveSections(raw: string | null | undefined): LessonContent {
         (Array.isArray(parsed?.sections) && parsed.sections) ||
         (Array.isArray(parsed?.content?.sections) && parsed.content.sections)
       if (Array.isArray(sectionsArray) && sectionsArray.length > 0) {
-        const quiz = extractQuiz(parsed)
+        const quiz = parseQuizMultiple(parsed)
         return { sections: normalizeSections(sectionsArray), ...(quiz ? { quiz } : {}) }
       }
 
@@ -495,6 +508,8 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         diamondReward={lesson.diamondReward}
         content={lesson.content}
         backHref={`/learn${activity.category ? `?category=${encodeURIComponent(activity.category)}` : ""}`}
+        activityId={activity.id}
+        activitySlug={activity.slug ?? activity.id}
       />
     </>
   )

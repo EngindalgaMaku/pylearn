@@ -375,26 +375,151 @@ const lessons: LessonSeed[] = [
   }
 ]
 
+/**
+* Build a small question bank per category and pad to minimum 5 questions.
+*/
+function getGenericQuestionBank(category: string) {
+ const lower = (category || "").toLowerCase();
+ if (lower.includes("project")) {
+   return [
+     {
+       type: "multiple_choice",
+       question: "Which module is recommended for security‑sensitive randomness?",
+       options: ["random", "secrets", "hashlib", "uuid"],
+       correctAnswer: 1,
+       explanation: "Use 'secrets' for cryptographically secure randomness."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which library helps parse command line arguments?",
+       options: ["json", "argparse", "logging", "dataclasses"],
+       correctAnswer: 1,
+       explanation: "'argparse' is the standard CLI parser in the stdlib."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which is a robust pattern for writing files safely?",
+       options: [
+         "Write directly without checks",
+         "Write to a temp file then rename",
+         "Keep file open forever",
+         "Use print statements only"
+       ],
+       correctAnswer: 1,
+       explanation: "Write-then-rename is a common atomic write pattern."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which module is appropriate for reading CSV files?",
+       options: ["csv", "pickle", "marshal", "tarfile"],
+       correctAnswer: 0,
+       explanation: "The csv module provides reader/writer utilities."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which timer is recommended for measuring short durations?",
+       options: ["time.time", "time.perf_counter", "datetime.now", "calendar.timegm"],
+       correctAnswer: 1,
+       explanation: "time.perf_counter offers high-resolution monotonic timing."
+     },
+     {
+       type: "multiple_choice",
+       question: "In a guessing game loop, which is a common best practice?",
+       options: [
+         "Never validate input types",
+         "Increment attempts and give hints",
+         "Hardcode the secret value",
+         "Exit immediately after first guess"
+       ],
+       correctAnswer: 1,
+       explanation: "User feedback and proper counters improve gameplay."
+     }
+   ];
+ }
+ // Fallback generic
+ return [
+   {
+     type: "multiple_choice",
+     question: "Which module loads and dumps JSON data?",
+     options: ["csv", "json", "configparser", "subprocess"],
+     correctAnswer: 1,
+     explanation: "'json' handles JSON encoding/decoding."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which approach helps ensure robust CLI apps?",
+     options: [
+       "Ignore invalid inputs",
+       "Validate inputs and provide helpful errors",
+       "Crash on first error",
+       "Avoid any checks to keep code short"
+     ],
+     correctAnswer: 1,
+     explanation: "Validation and helpful messages improve UX."
+   },
+   {
+     type: "multiple_choice",
+     question: "When converting CSV → JSON, which class maps rows by header?",
+     options: ["csv.Reader", "csv.DictReader", "csv.DictWriter", "json.DictReader"],
+     correctAnswer: 1,
+     explanation: "csv.DictReader uses the first row as field names."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which library is commonly used to build simple web apps?",
+     options: ["flask", "sqlite3", "argparse", "threading"],
+     correctAnswer: 0,
+     explanation: "Flask is a popular micro web framework."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which pattern ensures at least one character from each pool in a password?",
+     options: [
+       "Pick everything randomly from full pool",
+       "Pick one from each chosen pool, then fill rest, then shuffle",
+       "Use only digits",
+       "Repeat the same character"
+     ],
+     correctAnswer: 1,
+     explanation: "Guaranteeing coverage per pool improves password strength."
+   }
+ ];
+}
+
+function ensureFiveQuestions(content: any, category: string) {
+ const out = { ...(content || {}) };
+ const quiz = out.quiz ?? { questions: [] };
+ const list = Array.isArray(quiz.questions) ? quiz.questions.slice() : [];
+ const bank = getGenericQuestionBank(category);
+ let i = 0;
+ while (list.length < 5) {
+   list.push(bank[i % bank.length]);
+   i++;
+ }
+ out.quiz = { questions: list };
+ return out;
+}
+
 // Helper to build createMany records
 function buildCreateMany() {
-  return lessons.map((l) => ({
-    title: l.title,
-    description: l.description,
-    category: l.category,
-    difficulty: l.difficulty,
-    estimatedMinutes: l.estimatedMinutes,
-    diamondReward: l.diamondReward,
-    experienceReward: l.experienceReward,
-    sortOrder: l.sortOrder,
-    topicOrder: l.topicOrder,
-    isActive: true,
-    isLocked: false,
-    activityType: "lesson",
-    // Content is string JSON consumed by the app parser
-    content: JSON.stringify(l.content),
-    createdAt: now(),
-    updatedAt: now()
-  }))
+ return lessons.map((l) => ({
+   title: l.title,
+   description: l.description,
+   category: l.category,
+   difficulty: l.difficulty,
+   estimatedMinutes: l.estimatedMinutes,
+   diamondReward: l.diamondReward,
+   experienceReward: l.experienceReward,
+   sortOrder: l.sortOrder,
+   topicOrder: l.topicOrder,
+   isActive: true,
+   isLocked: false,
+   activityType: "lesson",
+   // Content is string JSON consumed by the app parser (ensure >= 5 questions)
+   content: JSON.stringify(ensureFiveQuestions(l.content, l.category)),
+   createdAt: now(),
+   updatedAt: now()
+ }))
 }
 
 async function main() {

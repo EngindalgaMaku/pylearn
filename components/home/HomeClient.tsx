@@ -2,13 +2,13 @@
 
 import { useSession, signOut } from "next-auth/react"
 import Link from "next/link"
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import PythonTipWidget from "@/components/python-tip-widget"
-import { UserPlus, LogIn } from "lucide-react"
+import { UserPlus, LogIn, Trophy } from "lucide-react"
 
 type ActivityItem = {
   id: string
@@ -32,13 +32,13 @@ type ModulesSummaryItem = {
   locked: number
 }
 
-
 type HomeClientProps = {
   dailyChallenge: ActivityItem | null
   nextLesson: ActivityItem | null
   modules: ModulesSummaryItem[]
   tip: any | null
   randomActivity: ActivityItem | null
+  leaderboardCurrentUser?: { userId: string; name: string; level: number; streak: number; xp: number; rank: number } | null
 }
 
 function difficultyLabel(d: number | string | undefined): string {
@@ -214,7 +214,7 @@ function AuthAwareCard() {
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <div className="flex items-center justify-between text-xs md:text-sm mb-1">
-                  <span>🧭 Level {level}</span>
+                  <span> Level {level}</span>
                   <span className="text-muted-foreground">{xpToNext} XP to next</span>
                 </div>
                 <Progress value={progress} className="h-2" />
@@ -291,7 +291,47 @@ function AuthAwareCard() {
 }
 
 export default function HomeClient(props: HomeClientProps) {
-  const { dailyChallenge, nextLesson, modules, tip, randomActivity } = props
+  const { dailyChallenge, nextLesson, modules, tip, randomActivity, leaderboardCurrentUser } = props
+
+  const [rankUser, setRankUser] = useState<typeof leaderboardCurrentUser>(leaderboardCurrentUser)
+  const [dailyQuiz, setDailyQuiz] = useState<{
+    quiz: { id: string; title: string; description?: string | null; rewardXP: number; rewardDiamonds: number; difficulty: number; expiresInSec: number }
+    progress: { attempted: boolean; score?: number; completed?: boolean }
+  } | null>(null)
+
+  // Client-side fetch to ensure we have cookies and can resolve current user rank
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const res = await fetch("/api/leaderboard?period=weekly", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json().catch(() => null)
+        if (!cancelled && data?.currentUser) {
+          setRankUser(data.currentUser)
+        }
+      } catch {}
+    }
+    // Always fetch to ensure client has fresh auth-bound data
+    run()
+    return () => { cancelled = true }
+  }, [leaderboardCurrentUser])
+
+  // Fetch Daily Quiz (dynamic)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/challenges/daily", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json().catch(() => null)
+        if (!cancelled && data?.success && data?.quiz) {
+          setDailyQuiz({ quiz: data.quiz, progress: data.progress || { attempted: false } })
+        }
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const topTopics = useMemo(() => {
     if (!modules || modules.length === 0) return []
@@ -305,9 +345,9 @@ export default function HomeClient(props: HomeClientProps) {
   const nextLessonDifficulty = difficultyLabel(nextLesson?.difficulty)
   const nextLessonMinutes = Math.max(1, Number(nextLesson?.estimatedMinutes ?? 5))
 
-  const dailyHref = dailyChallenge ? `/learn/${encodeURIComponent(dailyChallenge.slug)}` : "/challenges"
-  const dailyXp = dailyChallenge?.experienceReward ?? 25
-  const dailyDiamonds = dailyChallenge?.diamondReward ?? 10
+  const dailyHref = dailyQuiz?.quiz && (dailyQuiz.quiz as any).gamePath ? (dailyQuiz.quiz as any).gamePath : "/challenges"
+  const dailyXp = dailyQuiz?.quiz?.rewardXP ?? dailyChallenge?.experienceReward ?? 25
+  const dailyDiamonds = dailyQuiz?.quiz?.rewardDiamonds ?? dailyChallenge?.diamondReward ?? 10
 
   const tipData =
     tip && tip.title
@@ -352,7 +392,7 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
-            {/* Daily Challenge Banner (driven by DB) */}
+            {/* Daily Challenge Banner (driven by API / DB) */}
             <Card className="bg-gradient-to-r from-secondary/10 to-accent/10 border-secondary/20">
               <CardContent className="p-4 md:p-6">
                 <div className="flex items-center justify-between">
@@ -362,20 +402,54 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
                     </div>
                     <div>
                       <p className="font-medium text-sm md:text-base lg:text-lg">
-                        {dailyChallenge ? "Daily Lesson" : "Daily Challenge"}
+                        {dailyQuiz?.quiz?.title || "Daily Challenge"}
                       </p>
                       <p className="text-xs md:text-sm lg:text-base text-muted-foreground">
-                        {dailyChallenge
-                          ? `${dailyChallenge.title} • +${dailyChallenge.experienceReward ?? dailyXp} XP • +${
-                              dailyChallenge.diamondReward ?? dailyDiamonds
-                            } 💎`
-                          : `Personalized task • +${dailyXp} XP • +${dailyDiamonds} 💎`}
+                        {dailyQuiz?.quiz?.description || "Complete today’s quick challenge to earn rewards"}
+                      </p>
+                      <p className="text-xs md:text-sm lg:text-base mt-0.5">
+                        +{dailyXp} XP • +{dailyDiamonds} 💎 {dailyQuiz ? `• ${dailyQuiz.quiz.expiresInSec <= 0 ? "Expired" : "Ends today"}` : ""}
                       </p>
                     </div>
                   </div>
                   <Link href={dailyHref}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="md:size-default lg:px-6"
+                      disabled={Boolean(dailyQuiz && dailyQuiz.quiz.expiresInSec <= 0)}
+                    >
+                      {dailyQuiz?.progress?.completed ? "Completed" : dailyQuiz?.progress?.attempted ? "Continue" : "Take Quiz"}
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Your Weekly Rank (under Daily Challenge) */}
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 md:p-5 lg:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Trophy className="h-5 w-5 md:h-6 md:w-6 text-primary" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm md:text-base lg:text-lg">Your Weekly Rank</p>
+                      {rankUser ? (
+                        <p className="text-xs md:text-sm lg:text-base text-muted-foreground">
+                          #{rankUser.rank} • {rankUser.xp} XP this week
+                        </p>
+                      ) : (
+                        <p className="text-xs md:text-sm lg:text-base text-muted-foreground">
+                          Complete activities to enter the weekly leaderboard
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Link href="/leaderboard">
                     <Button size="sm" variant="secondary" className="md:size-default lg:px-6">
-                      {dailyChallenge ? "Start" : "Continue"}
+                      View Leaderboard
                     </Button>
                   </Link>
                 </div>

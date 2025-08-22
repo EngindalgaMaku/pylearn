@@ -31,7 +31,70 @@ function mapActivityToItem(r: any) {
     diamondReward: r.diamondReward ?? 10,
     experienceReward: r.experienceReward ?? 25,
     isLocked: !!r.isLocked,
+    tags: r.tags
+      ? Array.isArray(r.tags)
+        ? r.tags
+        : String(r.tags)
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+      : [],
   }
+}
+
+// Smart ordering score: lower score appears earlier
+function scoreActivity(r: any): number {
+  const title = (r.title || "").toLowerCase()
+  const content = (r.content || "").toLowerCase()
+  const tags: string[] = r.tags
+    ? Array.isArray(r.tags)
+      ? r.tags
+      : String(r.tags)
+          .split(",")
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean)
+    : []
+
+  const text = `${title} ${content} ${tags.join(" ")}`
+
+  let score = 0
+  // Respect explicit sort/topic order as baseline
+  score += (r.sortOrder ?? 0) * 10
+  score += (r.topicOrder ?? 0) * 2
+
+  // Difficulty influence (easier first)
+  score += (r.difficulty ?? 1) * 3
+
+  // Keyword-based curriculum shaping
+  const weight = (cond: boolean, w: number) => {
+    if (cond) score += w
+  }
+
+  // Very early topics
+  weight(/\b(intro|introduction|getting started|basics|fundamentals)\b/.test(text), -40)
+  weight(/\b(variable|variables|type|types|data type)\b/.test(text), -30)
+  weight(/\b(operator|arithmetic|comparison|logical)\b/.test(text), -24)
+  weight(/\b(string|f-string|formatting)\b/.test(text), -22)
+  weight(/\b(list|tuple)\b/.test(text), -20)
+  weight(/\b(dict|dictionary|set)\b/.test(text), -18)
+  weight(/\b(condition|if|elif|else)\b/.test(text), -16)
+  weight(/\b(loop|for|while|iteration|range)\b/.test(text), -14)
+  weight(/\b(function|def|parameter|argument|return|scope)\b/.test(text), -12)
+  weight(/\b(module|package|import)\b/.test(text), -10)
+  weight(/\b(file|io|read|write|path)\b/.test(text), -8)
+  weight(/\b(class|object|oop|inheritance|method)\b/.test(text), -6)
+  weight(/\b(exception|error handling|try|except|finally)\b/.test(text), -5)
+
+  // Tag boosters for curriculum order
+  weight(tags.includes("beginner"), -20)
+  weight(tags.includes("intermediate"), 5)
+  weight(tags.includes("advanced"), 12)
+
+  // Length heuristic: shorter intros first
+  const lengthPenalty = Math.min(20, Math.floor((content.length || 0) / 800))
+  score += lengthPenalty
+
+  return score
 }
 
 export async function GET(request: NextRequest) {
@@ -153,46 +216,56 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: paged list (existing behavior)
-    const [total, rows] = await Promise.all([
-      prisma.learningActivity.count({ where }),
-      prisma.learningActivity.findMany({
-        where,
-        orderBy: [{ sortOrder: "asc" }, { topicOrder: "asc" }, { title: "asc" }],
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          description: true,
-          category: true,
-          difficulty: true,
-          estimatedMinutes: true,
-          diamondReward: true,
-          experienceReward: true,
-          isLocked: true,
-        },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-    ])
+    const skip = (page - 1) * pageSize
+    // Fetch all to perform smart ordering, then paginate in-memory
+    const rows = await prisma.learningActivity.findMany({
+      where,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        category: true,
+        difficulty: true,
+        estimatedMinutes: true,
+        diamondReward: true,
+        experienceReward: true,
+        isLocked: true,
+        tags: true,
+        content: true,
+        sortOrder: true,
+        topicOrder: true,
+      },
+    })
+    const total = rows.length
+
+    // Smart order
+    const ordered = rows
+      .map((r) => ({ r, s: scoreActivity(r) }))
+      .sort((a, b) => a.s - b.s)
+      .map((x) => x.r)
+
+    const pageRows = ordered.slice(skip, skip + pageSize)
 
     // Mark completion for current user if available
     let completedIds = new Set<string>()
     const userId = await getUserId()
-    if (userId && rows.length > 0) {
+    if (userId && pageRows.length > 0) {
       const attempts = await prisma.activityAttempt.findMany({
         where: {
           userId,
           completed: true,
-          activityId: { in: rows.map((r) => r.id) },
+          activityId: { in: pageRows.map((r) => r.id) },
         },
         select: { activityId: true },
       })
       completedIds = new Set(attempts.map((a) => a.activityId))
     }
 
-    const items = rows.map((r) => ({
+    const items = pageRows.map((r, idx) => ({
       ...mapActivityToItem(r),
       completed: completedIds.has(r.id),
+      order: skip + idx + 1,
     }))
 
     return NextResponse.json(

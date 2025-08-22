@@ -48,6 +48,36 @@ const GAMES: Game[] = [
     xpReward: 60,
     keywords: ["variables", "naming rules", "identifiers"],
   },
+  {
+    id: "data-types",
+    title: "Data Types",
+    description: "Identify the correct Python data type for each value.",
+    difficulty: "Beginner",
+    icon: "📦",
+    timeEstimate: "3 min",
+    xpReward: 60,
+    keywords: ["types", "int", "str", "list", "dict"],
+  },
+  {
+    id: "loop-runner",
+    title: "Loop Runner",
+    description: "Predict outputs and iterations of simple Python loops.",
+    difficulty: "Beginner",
+    icon: "🔁",
+    timeEstimate: "4 min",
+    xpReward: 60,
+    keywords: ["for", "while", "range", "loops"],
+  },
+  {
+    id: "function-calls",
+    title: "Function Calls",
+    description: "Given a function and a call, choose the correct output.",
+    difficulty: "Beginner",
+    icon: "📞",
+    timeEstimate: "4 min",
+    xpReward: 60,
+    keywords: ["functions", "arguments", "return", "defaults"],
+  },
 ]
 
 export async function generateMetadata(): Promise<Metadata> {

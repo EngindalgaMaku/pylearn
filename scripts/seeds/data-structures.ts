@@ -527,26 +527,136 @@ const lessons: LessonSeed[] = [
   },
 ]
 
+/**
+* Build a small question bank per category and pad to minimum 5 questions.
+*/
+function getGenericQuestionBank(category: string) {
+ const lower = (category || "").toLowerCase();
+ if (lower.includes("data") || lower.includes("structure")) {
+   return [
+     {
+       type: "multiple_choice",
+       question: "Python lists are best described as:",
+       options: [
+         "Immutable and unordered",
+         "Ordered and mutable",
+         "Unordered and mutable",
+         "Ordered and immutable"
+       ],
+       correctAnswer: 1,
+       explanation: "Lists preserve order and allow in-place mutation."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which structure is hashable (when contents are hashable) and can be used as a dict key?",
+       options: ["list", "set", "tuple", "bytearray"],
+       correctAnswer: 2,
+       explanation: "Tuples are immutable and hashable if their contents are hashable."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which operation merges two dicts in Python 3.9+?",
+       options: ["+", "|", "&", "^"],
+       correctAnswer: 1,
+       explanation: "The | operator merges dictionaries (PEP 584)."
+     },
+     {
+       type: "multiple_choice",
+       question: "Average membership test complexity in a set is:",
+       options: ["O(n)", "O(log n)", "O(1) average", "O(n log n)"],
+       correctAnswer: 2,
+       explanation: "Sets use hashing, giving O(1) average membership tests."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which method sorts a list in place?",
+       options: ["sorted(xs)", "xs.sort()", "xs[::-1]", "reversed(xs)"],
+       correctAnswer: 1,
+       explanation: "list.sort() mutates the list; sorted(xs) returns a new list."
+     },
+     {
+       type: "multiple_choice",
+       question: "Which is best for O(1) append/pop from both ends?",
+       options: ["list", "deque", "set", "tuple"],
+       correctAnswer: 1,
+       explanation: "collections.deque is optimized for both ends."
+     }
+   ];
+ }
+ // Fallback generic
+ return [
+   {
+     type: "multiple_choice",
+     question: "Which structure enforces uniqueness of elements?",
+     options: ["list", "tuple", "set", "dict"],
+     correctAnswer: 2,
+     explanation: "Sets store unique items with fast membership tests."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which structure preserves insertion order and is mutable?",
+     options: ["set", "tuple", "list", "frozenset"],
+     correctAnswer: 2,
+     explanation: "Lists are ordered and mutable."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which is immutable and commonly used for fixed records?",
+     options: ["list", "deque", "tuple", "set"],
+     correctAnswer: 2,
+     explanation: "Tuples are immutable sequences."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which provides key-value mapping with average O(1) lookup?",
+     options: ["list", "dict", "set", "tuple"],
+     correctAnswer: 1,
+     explanation: "Dictionaries provide fast key lookups."
+   },
+   {
+     type: "multiple_choice",
+     question: "Which copy operation creates a shallow copy of a list?",
+     options: ["xs.copy()", "xs = xs", "xs.deep_copy()", "+= []"],
+     correctAnswer: 0,
+     explanation: "xs.copy() (or xs[:]) shallow-copies a list."
+   }
+ ];
+}
+
+function ensureFiveQuestions(content: any, category: string) {
+ const out = { ...(content || {}) };
+ const quiz = out.quiz ?? { questions: [] };
+ const list = Array.isArray(quiz.questions) ? quiz.questions.slice() : [];
+ const bank = getGenericQuestionBank(category);
+ let i = 0;
+ while (list.length < 5) {
+   list.push(bank[i % bank.length]);
+   i++;
+ }
+ out.quiz = { questions: list };
+ return out;
+}
+
 // Helper to build createMany records
 function buildCreateMany() {
-  return lessons.map((l) => ({
-    title: l.title,
-    description: l.description,
-    category: l.category,
-    difficulty: l.difficulty,
-    estimatedMinutes: l.estimatedMinutes,
-    diamondReward: l.diamondReward,
-    experienceReward: l.experienceReward,
-    sortOrder: l.sortOrder,
-    topicOrder: l.topicOrder,
-    isActive: true,
-    isLocked: false,
-    activityType: "lesson",
-    // Content is string JSON consumed by the app parser
-    content: JSON.stringify(l.content),
-    createdAt: now(),
-    updatedAt: now()
-  }))
+ return lessons.map((l) => ({
+   title: l.title,
+   description: l.description,
+   category: l.category,
+   difficulty: l.difficulty,
+   estimatedMinutes: l.estimatedMinutes,
+   diamondReward: l.diamondReward,
+   experienceReward: l.experienceReward,
+   sortOrder: l.sortOrder,
+   topicOrder: l.topicOrder,
+   isActive: true,
+   isLocked: false,
+   activityType: "lesson",
+   // Content is string JSON consumed by the app parser (ensure >= 5 questions)
+   content: JSON.stringify(ensureFiveQuestions(l.content, l.category)),
+   createdAt: now(),
+   updatedAt: now()
+ }))
 }
 
 async function main() {

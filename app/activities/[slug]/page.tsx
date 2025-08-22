@@ -20,6 +20,9 @@ import {
   HelpCircle,
   ArrowLeft,
 } from "lucide-react"
+import QuizRunner from "@/components/activities/quiz/QuizRunner"
+import MatchingRunner from "@/components/activities/matching/MatchingRunner"
+import FillBlanksRunner from "@/components/activities/fill-blanks/FillBlanksRunner"
 
 type Props = { params: { slug: string } }
 
@@ -36,6 +39,7 @@ type ActivityDetailDTO = {
   estimatedMinutes: number
   isLocked: boolean
   tags: string[]
+  content?: string
 }
 
 function labelizeType(type: string) {
@@ -100,6 +104,7 @@ async function getActivityBySlugOrId(slugOrId: string): Promise<ActivityDetailDT
       estimatedMinutes: true,
       isLocked: true,
       tags: true,
+      content: true,
     },
   })
 
@@ -122,10 +127,12 @@ async function getActivityBySlugOrId(slugOrId: string): Promise<ActivityDetailDT
     estimatedMinutes: Number(row.estimatedMinutes ?? 5),
     isLocked: Boolean(row.isLocked),
     tags,
+    content: typeof row.content === "string" ? row.content : undefined,
   }
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const awaitedParams = await params
   const hs = await headers()
   const proto = hs.get("x-forwarded-proto") || "http"
   const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000"
@@ -135,7 +142,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     where: {
       isActive: true,
       NOT: { activityType: "lesson" },
-      OR: [{ slug: params.slug }, { id: params.slug }],
+      OR: [{ slug: awaitedParams.slug }, { id: awaitedParams.slug }],
     },
     select: {
       title: true,
@@ -161,7 +168,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     data.description ||
     `Practice ${data.category || "Python"} with this interactive learning activity.`
 
-  const canonicalPath = `/activities/${data.slug ?? params.slug}`
+  const canonicalPath = `/activities/${data.slug ?? awaitedParams.slug}`
   const canonical = `${origin}${canonicalPath}`
 
   const keywords = [
@@ -194,7 +201,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ActivityDetailPage({ params }: Props) {
-  const activity = await getActivityBySlugOrId(params.slug)
+  const awaitedParams = await params
+  const activity = await getActivityBySlugOrId(awaitedParams.slug)
   if (!activity) {
     notFound()
   }
@@ -207,6 +215,83 @@ export default async function ActivityDetailPage({ params }: Props) {
   const proto = hs.get("x-forwarded-proto") || "http"
   const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000"
   const origin = `${proto}://${host}`
+
+  // If this is a matching activity, attempt to parse content JSON into config
+  let matchingConfig: { slug: string; title: string; timeLimitSec: number; instructions?: string; pairs: { left: string; right: string; topic?: string }[] } | null = null
+  // If this is a fill-in-the-blanks activity, parse content JSON into config
+  let fillConfig: { slug: string; title: string; timeLimitSec?: number; instructions?: string; items: { prompt: string; answer: string; hint?: string; explanation?: string }[] } | null = null
+  if (String(activity.activityType || "").toLowerCase() === "matching") {
+    try {
+      const raw = activity.content ? JSON.parse(activity.content) : null
+      if (raw && Array.isArray(raw.pairs)) {
+        const timeLimitSec = typeof raw.timeLimitSec === "number" ? raw.timeLimitSec : Number(raw.timeLimitSec) || activity.estimatedMinutes * 60
+        matchingConfig = {
+          slug: activity.slug,
+          title: raw.title || activity.title,
+          timeLimitSec: timeLimitSec > 0 ? timeLimitSec : activity.estimatedMinutes * 60,
+          instructions: typeof raw.instructions === "string" ? raw.instructions : undefined,
+          pairs: raw.pairs
+            .filter((p: any) => p && typeof p.left === "string" && typeof p.right === "string")
+            .map((p: any) => ({ left: p.left, right: p.right, topic: typeof p.topic === "string" ? p.topic : undefined })),
+        }
+      }
+    } catch (e) {
+      // ignore malformed JSON; MatchingRunner will fall back to local bank
+    }
+  } else if (["fill_blanks", "fill blanks", "fill-in-the-blanks", "fill in the blanks", "cloze"].includes(String(activity.activityType || "").toLowerCase())) {
+    try {
+      const raw = activity.content ? JSON.parse(activity.content) : null
+      if (raw) {
+        const timeLimitSec = typeof raw.timeLimitSec === "number" ? raw.timeLimitSec : Number(raw.timeLimitSec)
+        const title = raw.title || activity.title
+        const instructions = typeof raw.instructions === "string" ? raw.instructions : undefined
+
+        // Prefer items; fall back to questions; support multiple answer shapes
+        const sourceList = Array.isArray(raw.items)
+          ? raw.items
+          : Array.isArray(raw.questions)
+          ? raw.questions
+          : []
+
+        if (Array.isArray(sourceList) && sourceList.length > 0) {
+          const items = sourceList
+            .map((q: any) => {
+              const prompt = typeof q.prompt === "string" ? q.prompt : (typeof q.text === "string" ? q.text : undefined)
+              if (!prompt) return null
+              // Accept answer, correctAnswer, or answers (array)
+              const ansField = (q.answer ?? q.correctAnswer ?? q.answers)
+              let answer: string | undefined = undefined
+              if (typeof ansField === "string") answer = ansField
+              else if (Array.isArray(ansField)) {
+                const arr = ansField.filter((x) => typeof x === "string").map((s: string) => s.trim()).filter(Boolean)
+                // Choose first as canonical; runner supports single answer string
+                answer = arr[0]
+              }
+              if (!answer) return null
+              return {
+                prompt,
+                answer,
+                hint: typeof q.hint === "string" ? q.hint : undefined,
+                explanation: typeof q.explanation === "string" ? q.explanation : (typeof q.explain === "string" ? q.explain : undefined),
+              }
+            })
+            .filter(Boolean) as { prompt: string; answer: string; hint?: string; explanation?: string }[]
+
+          if (items.length > 0) {
+            fillConfig = {
+              slug: activity.slug,
+              title,
+              timeLimitSec: timeLimitSec && timeLimitSec > 0 ? timeLimitSec : undefined,
+              instructions,
+              items,
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore; FillBlanksRunner has sensible defaults
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-card to-background">
@@ -293,25 +378,34 @@ export default async function ActivityDetailPage({ params }: Props) {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-              <div className="flex items-center gap-2 bg-muted/30 p-3 rounded-lg">
-                <Diamond className="w-4 h-4 text-blue-600" />
-                <div className="text-sm">
+              <div className="flex items-center justify-between sm:justify-start sm:gap-2 bg-muted/30 p-3 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Diamond className="w-5 h-5 text-blue-600" />
+                  <div className="text-sm font-medium">{activity.diamondReward}</div>
+                </div>
+                <div className="text-xs text-muted-foreground sm:hidden">Elmas</div>
+                <div className="hidden sm:block text-sm">
                   <div className="text-muted-foreground">Diamonds</div>
-                  <div className="font-medium">{activity.diamondReward}</div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-muted/30 p-3 rounded-lg">
-                <Zap className="w-4 h-4 text-primary" />
-                <div className="text-sm">
+              <div className="flex items-center justify-between sm:justify-start sm:gap-2 bg-muted/30 p-3 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-primary" />
+                  <div className="text-sm font-medium">{activity.experienceReward} XP</div>
+                </div>
+                <div className="text-xs text-muted-foreground sm:hidden">Deneyim</div>
+                <div className="hidden sm:block text-sm">
                   <div className="text-muted-foreground">Experience</div>
-                  <div className="font-medium">{activity.experienceReward} XP</div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-muted/30 p-3 rounded-lg">
-                <Clock className="w-4 h-4 text-muted-foreground" />
-                <div className="text-sm">
+              <div className="flex items-center justify-between sm:justify-start sm:gap-2 bg-muted/30 p-3 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-muted-foreground" />
+                  <div className="text-sm font-medium">{activity.estimatedMinutes} dk</div>
+                </div>
+                <div className="text-xs text-muted-foreground sm:hidden">Süre</div>
+                <div className="hidden sm:block text-sm">
                   <div className="text-muted-foreground">Estimated Time</div>
-                <div className="font-medium">{activity.estimatedMinutes} minutes</div>
                 </div>
               </div>
             </div>
@@ -329,11 +423,30 @@ export default async function ActivityDetailPage({ params }: Props) {
               </div>
             )}
 
-            {/* Placeholder for interactive content or instructions */}
-            <div className="text-sm text-muted-foreground">
-              This is the activity detail page. You can embed interactive content or
-              instructions here tailored to the activity type.
-            </div>
+            {String(activity.activityType || "").toLowerCase() === "quiz" ? (
+              <QuizRunner slug={activity.slug} title={activity.title} />
+            ) : String(activity.activityType || "").toLowerCase() === "matching" ? (
+              <MatchingRunner
+                slug={activity.slug}
+                title={activity.title}
+                diamondReward={activity.diamondReward}
+                xpReward={activity.experienceReward}
+                config={matchingConfig}
+              />
+            ) : ["fill_blanks", "fill blanks", "fill-in-the-blanks", "fill in the blanks"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <FillBlanksRunner
+                slug={activity.slug}
+                title={activity.title}
+                diamondReward={activity.diamondReward}
+                xpReward={activity.experienceReward}
+                config={fillConfig}
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                This is the activity detail page. You can embed interactive content or
+                instructions here tailored to the activity type.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
