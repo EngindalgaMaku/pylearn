@@ -21,7 +21,7 @@ const openSans = Open_Sans({
   variable: "--font-open-sans",
 })
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net"
 
 export const metadata: Metadata = {
   title: "PyLearn - Python Learning App",

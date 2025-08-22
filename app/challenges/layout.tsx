@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net"
 const url = `${baseUrl}/challenges`
 const title = "Python Challenges | PyLearn"
 const description = "Level up your Python skills with daily, weekly, and special coding challenges on PyLearn."

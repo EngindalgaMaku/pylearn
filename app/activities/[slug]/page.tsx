@@ -134,9 +134,10 @@ async function getActivityBySlugOrId(slugOrId: string): Promise<ActivityDetailDT
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const awaitedParams = await params
   const hs = await headers()
-  const proto = hs.get("x-forwarded-proto") || "http"
-  const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000"
-  const origin = `${proto}://${host}`
+  const envBase = process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net"
+  const proto = hs.get("x-forwarded-proto") || (envBase.startsWith("https") ? "https" : "http")
+  const hostHeader = hs.get("x-forwarded-host") || hs.get("host")
+  const origin = hostHeader ? `${proto}://${hostHeader}` : envBase
 
   const data = await prisma.learningActivity.findFirst({
     where: {
@@ -212,9 +213,10 @@ export default async function ActivityDetailPage({ params }: Props) {
 
   // Build absolute origin for canonical/structured data
   const hs = await headers()
-  const proto = hs.get("x-forwarded-proto") || "http"
-  const host = hs.get("x-forwarded-host") || hs.get("host") || "localhost:3000"
-  const origin = `${proto}://${host}`
+  const envBase2 = process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net"
+  const proto2 = hs.get("x-forwarded-proto") || (envBase2.startsWith("https") ? "https" : "http")
+  const hostHeader2 = hs.get("x-forwarded-host") || hs.get("host")
+  const origin = hostHeader2 ? `${proto2}://${hostHeader2}` : envBase2
 
   // If this is a matching activity, attempt to parse content JSON into config
   let matchingConfig: { slug: string; title: string; timeLimitSec: number; instructions?: string; pairs: { left: string; right: string; topic?: string }[] } | null = null

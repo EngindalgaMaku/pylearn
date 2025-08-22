@@ -51,9 +51,10 @@ export async function generateMetadata(
   }
 
   const h = await headers()
-  const host = h.get("host") || "localhost:3000"
-  const proto = h.get("x-forwarded-proto") || "https"
-  const baseUrl = `${proto}://${host}`
+  const envBase = process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net"
+  const proto = h.get("x-forwarded-proto") || (envBase.startsWith("https") ? "https" : "http")
+  const hostHeader = h.get("x-forwarded-host") || h.get("host")
+  const baseUrl = hostHeader ? `${proto}://${hostHeader}` : envBase
 
   const pathname = `/learn/${activity.slug ?? activity.id}`
   const url = `${baseUrl}${pathname}`
@@ -440,9 +441,11 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
 
   // Build JSON-LD structured data (Article + Breadcrumbs)
   const h2 = await headers()
-  const host = h2.get("host") || "localhost:3000"
-  const proto = h2.get("x-forwarded-proto") || "https"
-  const baseUrl = `${proto}://${host}`
+  const envBase2 = process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net"
+  const proto2 = h2.get("x-forwarded-proto") || (envBase2.startsWith("https") ? "https" : "http")
+  const hostHeader2 = h2.get("x-forwarded-host") || h2.get("host")
+  const baseUrl = hostHeader2 ? `${proto2}://${hostHeader2}` : envBase2
+
   const lessonUrl = `${baseUrl}/learn/${(activity.slug ?? activity.id)}`
 
   const articleLD = {

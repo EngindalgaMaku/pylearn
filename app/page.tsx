@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   title: "PyLearn – Learn Python by Playing | Free Interactive Lessons, Quizzes, Games",
   description:
     "Master Python with interactive lessons, quizzes, and games. Personalized daily challenges, progress tracking, and leaderboards. Perfect for beginners and intermediate learners.",
-  alternates: { canonical: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000" },
+  alternates: { canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net" },
   robots: {
     index: true,
     follow: true,
