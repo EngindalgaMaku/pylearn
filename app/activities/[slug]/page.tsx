@@ -23,6 +23,7 @@ import {
 import QuizRunner from "@/components/activities/quiz/QuizRunner"
 import MatchingRunner from "@/components/activities/matching/MatchingRunner"
 import FillBlanksRunner from "@/components/activities/fill-blanks/FillBlanksRunner"
+import MemoryGameActivity from "@/components/activities/memory/MemoryGameActivity"
 
 type Props = { params: { slug: string } }
 
@@ -218,11 +219,14 @@ export default async function ActivityDetailPage({ params }: Props) {
   const hostHeader2 = hs.get("x-forwarded-host") || hs.get("host")
   const origin = hostHeader2 ? `${proto2}://${hostHeader2}` : envBase2
 
-  // If this is a matching activity, attempt to parse content JSON into config
+  // Parse content depending on activity type
   let matchingConfig: { slug: string; title: string; timeLimitSec: number; instructions?: string; pairs: { left: string; right: string; topic?: string }[] } | null = null
-  // If this is a fill-in-the-blanks activity, parse content JSON into config
   let fillConfig: { slug: string; title: string; timeLimitSec?: number; instructions?: string; items: { prompt: string; answer: string; hint?: string; explanation?: string }[] } | null = null
-  if (String(activity.activityType || "").toLowerCase() === "matching") {
+  let memoryContent: any | null = null
+
+  const typeLower = String(activity.activityType || "").toLowerCase()
+
+  if (typeLower === "matching") {
     try {
       const raw = activity.content ? JSON.parse(activity.content) : null
       if (raw && Array.isArray(raw.pairs)) {
@@ -240,7 +244,42 @@ export default async function ActivityDetailPage({ params }: Props) {
     } catch (e) {
       // ignore malformed JSON; MatchingRunner will fall back to local bank
     }
-  } else if (["fill_blanks", "fill blanks", "fill-in-the-blanks", "fill in the blanks", "cloze"].includes(String(activity.activityType || "").toLowerCase())) {
+  } else if (["memory", "memory game", "memory_game"].includes(typeLower)) {
+    try {
+      const raw = activity.content ? JSON.parse(activity.content) : null
+      if (raw) {
+        const cards = Array.isArray(raw.cards)
+          ? raw.cards
+          : Array.isArray(raw.pairs)
+            ? (raw.pairs as any[])
+                .map((p: any, i) => {
+                  const id = typeof p?.id === "number" ? p.id : i + 1
+                  const card1 = typeof p?.card1 === "string" ? p.card1 : String(p?.card1 ?? "")
+                  const card2 = typeof p?.card2 === "string" ? p.card2 : String(p?.card2 ?? "")
+                  if (!card1 || !card2) return null
+                  return { id, front: card1, back: card2 }
+                })
+                .filter(Boolean)
+            : []
+
+        const timeLimit = typeof raw.timeLimit === "number" && raw.timeLimit > 0
+          ? raw.timeLimit
+          : typeof raw.timeLimitSec === "number" && raw.timeLimitSec > 0
+            ? raw.timeLimitSec
+            : activity.estimatedMinutes * 60
+
+        const rules = typeof raw.rules === "string" && raw.rules.trim() !== ""
+          ? raw.rules
+          : typeof raw.instructions === "string"
+            ? raw.instructions
+            : "Flip two cards at a time to find matching pairs. Match all pairs before time runs out!"
+
+        memoryContent = { cards, rules, timeLimit }
+      }
+    } catch {
+      // ignore malformed JSON; MemoryGameActivity will handle empty content
+    }
+  } else if (["fill_blanks", "fill blanks", "fill-in-the-blanks", "fill in the blanks", "cloze"].includes(typeLower)) {
     try {
       const raw = activity.content ? JSON.parse(activity.content) : null
       if (raw) {
@@ -442,6 +481,13 @@ export default async function ActivityDetailPage({ params }: Props) {
                 diamondReward={activity.diamondReward}
                 xpReward={activity.experienceReward}
                 config={fillConfig}
+              />
+            ) : ["memory", "memory game", "memory_game"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <MemoryGameActivity
+                activity={{
+                  ...activity,
+                  content: memoryContent ?? { cards: [], rules: "", timeLimit: activity.estimatedMinutes * 60 },
+                } as any}
               />
             ) : (
               <div className="text-sm text-muted-foreground">

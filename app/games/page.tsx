@@ -78,6 +78,16 @@ const GAMES: Game[] = [
     xpReward: 60,
     keywords: ["functions", "arguments", "return", "defaults"],
   },
+  {
+    id: "memory-match",
+    title: "Memory Match",
+    description: "Flip cards and match Python concepts to reinforce recall.",
+    difficulty: "Beginner",
+    icon: "🧠",
+    timeEstimate: "4 min",
+    xpReward: 60,
+    keywords: ["memory", "matching", "terms", "definitions"],
+  },
 ]
 
 export async function generateMetadata(): Promise<Metadata> {

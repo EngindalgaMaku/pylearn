@@ -7,6 +7,7 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
+    "postinstall": "prisma generate",
     "seed:challenges": "tsx scripts/seeds/challenges.ts"
   },
   "dependencies": {
@@ -63,6 +64,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "prisma": "^6.14.0",
     "zod": "3.25.67"
   },
   "devDependencies": {
@@ -71,7 +73,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "postcss": "^8.5",
-    "prisma": "^6.14.0",
     "tailwindcss": "^4.1.9",
     "tsx": "^4.20.4",
     "tw-animate-css": "1.3.3",
