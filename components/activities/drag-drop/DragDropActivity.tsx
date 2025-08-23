@@ -24,6 +24,7 @@ import {
   Gift,
   Sparkles,
   LogIn,
+  X,
 } from "lucide-react";
 
 // ===== Types =====
@@ -1025,9 +1026,10 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
                               {!submitted && (
                                 <button
                                   onClick={() => removeItemFromCategory(String(cat.id), it)}
-                                  className="text-xs text-red-500 hover:text-red-700"
+                                  className="text-red-500 hover:text-red-700"
                                 >
-                                  Remove
+                                  <span className="sr-only">Remove</span>
+                                  <X className="w-4 h-4" aria-hidden="true" />
                                 </button>
                               )}
                             </div>
@@ -1207,9 +1209,10 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => removeBlock(block)}
-                          className="text-xs text-red-500 hover:text-red-700"
+                          className="text-red-500 hover:text-red-700"
                         >
-                          Remove
+                          <span className="sr-only">Remove</span>
+                          <X className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </div>

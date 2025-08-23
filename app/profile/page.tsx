@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { generateImageToken } from "@/lib/imageToken"
+import { getXPProgress } from "@/lib/xp"
 
 // Always render dynamically so latest stats show
 export const dynamic = "force-dynamic"
@@ -135,9 +136,9 @@ export default async function ProfilePage({
   ])
 
   const totalXP = user?.experience ?? 0
-  const currentLevel = user?.level ?? 1
-  const nextLevelThreshold = 500
-  const xpToNextLevel = Math.max(0, nextLevelThreshold - (totalXP % nextLevelThreshold))
+  const xp = getXPProgress(totalXP)
+  const currentLevel = xp.level
+  const xpToNextLevel = xp.xpToNextLevel
   const currentStreak = user?.loginStreak ?? 0
   const longestStreak = user?.maxLoginStreak ?? 0
 
@@ -212,7 +213,7 @@ export default async function ProfilePage({
     averageScore,
   }
 
-  const levelProgress = ((learningStats.totalXP % nextLevelThreshold) / nextLevelThreshold) * 100
+  const levelProgress = xp.progressPercent
 
   // Map owned cards to display items with secure image URLs
   const ownedCardItems = (ownedCards || []).map((uc) => {

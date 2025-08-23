@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import PythonTipWidget from "@/components/python-tip-widget"
 import { UserPlus, LogIn, Trophy } from "lucide-react"
+import { getXPProgress } from "@/lib/xp"
 
 type ActivityItem = {
   id: string
@@ -173,16 +174,15 @@ function AuthAwareCard() {
       (session.user as any)?.name ||
       (session.user?.email ? session.user.email.split("@")[0] : "Friend")
 
-    const level = user?.level ?? 1
     const experience = user?.experience ?? 0
+    const xp = getXPProgress(experience)
+    const level = xp.level
     const diamonds = user?.currentDiamonds ?? 0
     const streak = user?.loginStreak ?? 1
 
-    // Fixed per-level XP requirement (100 XP per level)
-    const perLevel = 100
-    const currentInLevel = Math.max(0, experience % perLevel)
-    const progress = Math.min(100, Math.round((currentInLevel / perLevel) * 100))
-    const xpToNext = Math.max(0, perLevel - currentInLevel)
+    // Progress using scalable XP curve
+    const progress = xp.progressPercent
+    const xpToNext = xp.xpToNextLevel
 
     return (
       <Card className="bg-gradient-to-br from-primary/10 to-secondary/10 border-primary/20">

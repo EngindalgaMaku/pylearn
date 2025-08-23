@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { getLevelFromXP } from "@/lib/xp"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
 
     const users = await prisma.user.findMany({
       where: { id: { in: entries.map((e) => e.userId) } },
-      select: { id: true, username: true, level: true, loginStreak: true, avatar: true },
+      select: { id: true, username: true, level: true, experience: true, loginStreak: true, avatar: true },
     })
     const usersById = new Map(users.map((u) => [u.id, u]))
 
@@ -97,7 +98,7 @@ export async function GET(req: NextRequest) {
         userId: e.userId,
         name: u?.username || "User",
         avatar: u?.avatar || "🐍",
-        level: u?.level || 1,
+        level: getLevelFromXP(u?.experience || 0) || u?.level || 1,
         streak: u?.loginStreak || 0,
         xp: e.xp,
         rank: idx + 1,
@@ -118,12 +119,12 @@ export async function GET(req: NextRequest) {
       if (idx >= 0) {
         const u = usersById.get(currentUserId) || (await prisma.user.findUnique({
           where: { id: currentUserId },
-          select: { username: true, level: true, loginStreak: true },
+          select: { username: true, level: true, experience: true, loginStreak: true },
         }))
         currentUser = {
           userId: currentUserId,
           name: u?.username || "You",
-          level: u?.level || 1,
+          level: getLevelFromXP((u as any)?.experience || 0) || u?.level || 1,
           streak: u?.loginStreak || 0,
           xp: allEntriesSorted[idx].xp,
           rank: idx + 1,
