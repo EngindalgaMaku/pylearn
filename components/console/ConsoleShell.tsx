@@ -122,10 +122,11 @@ export default function ConsoleShell({
             <button
               type="button"
               onClick={handleLogout}
-              className={`${itemCls} w-full text-left text-red-600`}
+              title="Logout"
+              aria-label="Logout"
+              className="h-8 w-8 inline-flex items-center justify-center rounded border text-xs text-red-600 hover:bg-red-50"
             >
-              <span className="text-base">🚪</span>
-              <span className={labelCls}>Logout</span>
+              🚪
             </button>
           </nav>
         </div>

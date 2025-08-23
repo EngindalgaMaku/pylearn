@@ -1,5 +1,6 @@
 "use client";
 import React, { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 type Props = {
   action: () => Promise<void>;
@@ -11,6 +12,7 @@ export default function ConfirmDeleteButton({ action, title = "Delete item", des
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   const onOpen = () => {
     setOpen(true);
@@ -27,6 +29,8 @@ export default function ConfirmDeleteButton({ action, title = "Delete item", des
         await action();
       } finally {
         onClose();
+        // Ensure server-rendered data re-fetches
+        router.refresh();
       }
     });
   };
@@ -43,7 +47,10 @@ export default function ConfirmDeleteButton({ action, title = "Delete item", des
         {/* Icon-only button: simple trash glyph */}
         <span aria-hidden>🗑️</span>
       </button>
-      <dialog ref={dialogRef} className="rounded-lg p-0 w-[360px] max-w-[90vw]">
+      <dialog
+        ref={dialogRef}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg p-0 w-[360px] max-w-[90vw] backdrop:bg-black/40"
+      >
         <div className="p-4 space-y-3">
           <div className="text-base font-medium">{title}</div>
           <div className="text-sm text-muted-foreground">{description}</div>

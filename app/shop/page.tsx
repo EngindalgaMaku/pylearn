@@ -300,7 +300,7 @@ export default function ShopPage() {
     setLoading(true)
     setError(null)
     const url = `/api/cards?category=${selectedCategory}&page=${page}&pageSize=${pageSize}`
-    fetch(url)
+    fetch(url, { cache: "no-store" })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.json()

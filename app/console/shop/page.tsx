@@ -1,17 +1,343 @@
 import { getServerSession } from "next-auth";
+import { revalidatePath } from "next/cache";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
+import { generateImageToken } from "@/lib/imageToken";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import ImagePreview from "@/components/ImagePreview";
+import BulkUploadClient from "@/components/BulkUploadClient";
+import ReanalyzeButtons from "@/components/ReanalyzeButtons";
 import { Card as UICard, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Prisma } from "@prisma/client";
 import fs from "fs/promises";
 import path from "path";
-import sharp from "sharp";
 import crypto from "crypto";
 import type { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+// Top-level server actions to avoid hydration issues from inline closures
+export async function bulkFilteredAction(formData: FormData) {
+  "use server";
+  const q = String(formData.get("q") || "").trim();
+  const category = String(formData.get("category") || "anime-collection");
+  const rarity = String(formData.get("rarity") || "").trim();
+  const purch = String(formData.get("purch") || "");
+  const pub = String(formData.get("pub") || "");
+  const field = String(formData.get("field") || "");
+  const value = String(formData.get("value") || "");
+  const op = String(formData.get("op") || "apply");
+  const cleanLimit = Math.min(5000, Math.max(50, Number(formData.get("clean_limit") || 500)));
+  const setRarity = String(formData.get("setRarity") || "").trim();
+  const pageStr = String(formData.get("page") || "1");
+  const sizeStr = String(formData.get("size") || "10");
+
+  const normCat = (input: string) => {
+    const c = (input || "").toLowerCase();
+    if (c === "anime collection" || c === "anime") return "anime-collection";
+    if (c === "star collection" || c === "star") return "star-collection";
+    if (c === "car collection" || c === "car") return "car-collection";
+    return c || "anime-collection";
+  };
+  const catEff = normCat(category);
+  const catWhere: Prisma.CardWhereInput | {} = category
+    ? {
+        OR: [
+          { category: { equals: catEff, mode: Prisma.QueryMode.insensitive } },
+          { category: { equals: catEff.split("-")[0], mode: Prisma.QueryMode.insensitive } },
+          {
+            category: {
+              equals:
+                catEff === "anime-collection"
+                  ? "Anime Collection"
+                  : catEff === "star-collection"
+                    ? "Star Collection"
+                    : catEff === "car-collection"
+                      ? "Car Collection"
+                      : catEff,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+        ],
+      }
+    : {};
+
+  const where: Prisma.CardWhereInput | undefined = (q || category || rarity || purch || pub)
+    ? {
+        AND: [
+          q
+            ? {
+                OR: [
+                  { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
+                  { cardTitle: { contains: q, mode: Prisma.QueryMode.insensitive } },
+                  { series: { contains: q, mode: Prisma.QueryMode.insensitive } },
+                  { character: { contains: q, mode: Prisma.QueryMode.insensitive } },
+                ],
+              }
+            : {},
+          catWhere as any,
+          rarity ? { rarity } : {},
+          purch ? { isPurchasable: purch === "yes" } : {},
+          pub ? { isPublic: pub === "yes" } : {},
+        ],
+      }
+    : undefined;
+
+  if (op === "clean_titles") {
+    const sanitizeTitle = (input?: string | null): string => {
+      if (!input) return "";
+      let s = String(input);
+      s = s.replace(/^\d{6,}[_-][0-9a-f]{4,}[_-]/i, "");
+      s = s.replace(/[_-]+/g, " ");
+      s = s
+        .split(/\s+/)
+        .filter((tok) => {
+          const t = tok.trim();
+          if (!t) return false;
+          if (/^\d{4,}$/i.test(t)) return false;
+          if (/^[0-9a-f]{4,}$/i.test(t)) return false;
+          if (/^[0-9a-z]{8,}$/i.test(t)) return false;
+          if (/[0-9]/.test(t)) return false;
+          if (/^\d{8}$/.test(t)) return false;
+          if (/^\d{4}$/.test(t)) return false;
+          if (/^[0-9a-f]{3,8}$/i.test(t)) return false;
+          return true;
+        })
+        .join(" ");
+      s = s.replace(/[0-9a-z]{10,}/gi, " ").replace(/\s+/g, " ").trim();
+      s = s.replace(/\b(Anime Collection)\s+\1\b/gi, "$1");
+      return s;
+    };
+
+    const friendlyCat = (slug: string) => (slug === "anime-collection" ? "Anime Collection" : slug === "star-collection" ? "Star Collection" : slug === "car-collection" ? "Car Collection" : slug);
+    const affected = await prisma.card.findMany({ where, select: { id: true, name: true, cardTitle: true, series: true, character: true, fileName: true, category: true }, orderBy: { id: "asc" }, take: cleanLimit });
+    for (const c of affected) {
+      const baseFromFile = (c.fileName || "").replace(/\.(png|jpe?g|webp|gif|bmp|tiff)$/i, "");
+      const base = sanitizeTitle((c.cardTitle || c.name || baseFromFile || "").replace(/-/g, " "));
+      const catPrefix = friendlyCat((c as any).category || "");
+      const finalTitle = sanitizeTitle(`${catPrefix} ${base}`.trim());
+      // eslint-disable-next-line no-await-in-loop
+      await prisma.card.update({ where: { id: c.id }, data: { name: finalTitle, cardTitle: finalTitle } });
+    }
+    revalidatePath("/console/shop");
+    revalidatePath("/shop");
+    const params = new URLSearchParams({ q, category, rarity, purch, pub, page: "1", size: sizeStr });
+    redirect(`/console/shop?${params.toString()}`);
+  } else if (op === "title_from_character") {
+    const sanitizeTitle = (input?: string | null): string => {
+      if (!input) return "";
+      let s = String(input);
+      s = s.replace(/^\d{6,}[_-][0-9a-f]{4,}[_-]/i, "");
+      s = s.replace(/[_-]+/g, " ");
+      s = s
+        .split(/\s+/)
+        .filter((tok) => {
+          const t = tok.trim();
+          if (!t) return false;
+          if (/^\d{4,}$/i.test(t)) return false;
+          if (/^[0-9a-f]{4,}$/i.test(t)) return false;
+          if (/^[0-9a-z]{8,}$/i.test(t)) return false;
+          if (/[0-9]/.test(t)) return false;
+          if (/^\d{8}$/.test(t)) return false;
+          if (/^\d{4}$/.test(t)) return false;
+          if (/^[0-9a-f]{3,8}$/i.test(t)) return false;
+          return true;
+        })
+        .join(" ");
+      s = s.replace(/[0-9a-z]{10,}/gi, " ").replace(/\s+/g, " ").trim();
+      s = s.replace(/\b(Anime Collection)\s+\1\b/gi, "$1");
+      return s;
+    };
+    const affected = await prisma.card.findMany({ where, select: { id: true, character: true }, orderBy: { id: "asc" }, take: cleanLimit });
+    for (const c of affected) {
+      const title = sanitizeTitle(c.character);
+      if (!title) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await prisma.card.update({ where: { id: c.id }, data: { name: title, cardTitle: title } });
+    }
+    revalidatePath("/console/shop");
+    revalidatePath("/shop");
+    const params = new URLSearchParams({ q, category, rarity, purch, pub, page: "1", size: sizeStr });
+    redirect(`/console/shop?${params.toString()}`);
+  } else if (op === "backfill_uploaddate") {
+    await prisma.card.updateMany({ where: { AND: [where || {}, { uploadDate: null as any }] } as any, data: { uploadDate: new Date() } });
+    revalidatePath("/console/shop");
+    revalidatePath("/shop");
+    const params = new URLSearchParams({ q, category, rarity, purch, pub, page: pageStr, size: sizeStr });
+    redirect(`/console/shop?${params.toString()}`);
+  } else {
+    if (field === "isPurchasable") {
+      await prisma.card.updateMany({ where, data: { isPurchasable: value === "yes" } });
+    } else if (field === "isPublic") {
+      await prisma.card.updateMany({ where, data: { isPublic: value === "yes" } });
+    }
+    if (setRarity) {
+      await prisma.card.updateMany({ where, data: { rarity: setRarity } });
+    }
+    revalidatePath("/console/shop");
+    const params = new URLSearchParams({ q, category, rarity, purch, pub, page: pageStr, size: sizeStr });
+    redirect(`/console/shop?${params.toString()}`);
+  }
+}
+
+export async function bulkSelectedAction(formData: FormData) {
+  "use server";
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  const action = String(formData.get("bulk_action") || "");
+  const rarity = String(formData.get("bulk_rarity") || "").trim();
+  const publicVal = String(formData.get("bulk_public") || "");
+  const purchVal = String(formData.get("bulk_purch") || "");
+  const q = String(formData.get("q") || "");
+  const categorySlug = String(formData.get("category") || "");
+  const purch = String(formData.get("purch") || "");
+  const pub = String(formData.get("pub") || "");
+  const size = String(formData.get("size") || "10");
+  const page = String(formData.get("page") || "1");
+  if (ids.length === 0) {
+    const params = new URLSearchParams({ q, category: categorySlug, purch, pub, page, size });
+    redirect(`/console/shop?${params.toString()}`);
+  }
+  const where = { id: { in: ids } } as any;
+  switch (action) {
+    case "delete": {
+      const affected = await prisma.card.findMany({ where, select: { id: true, imagePath: true, thumbnailUrl: true, imageUrl: true } });
+      for (const a of affected) {
+        const absImg = toAbsolutePath((a as any).imagePath) || toAbsolutePath((a as any).imageUrl);
+        const absThumb = deriveThumbAbs((a as any).imagePath, (a as any).thumbnailUrl);
+        // eslint-disable-next-line no-await-in-loop
+        await Promise.all([safeUnlink(absThumb), safeUnlink(absImg)]);
+      }
+      await prisma.card.deleteMany({ where });
+      revalidatePath("/console/shop");
+      revalidatePath("/shop");
+      break;
+    }
+    case "title_from_character": {
+      const sanitizeTitle = (input?: string | null): string => {
+        if (!input) return "";
+        let s = String(input);
+        s = s.replace(/^\d{6,}[_-][0-9a-f]{4,}[_-]/i, "");
+        s = s.replace(/[_-]+/g, " ");
+        s = s
+          .split(/\s+/)
+          .filter((tok) => {
+            const t = tok.trim();
+            if (!t) return false;
+            if (/^\d{4,}$/i.test(t)) return false;
+            if (/^[0-9a-f]{4,}$/i.test(t)) return false;
+            if (/^[0-9a-z]{8,}$/i.test(t)) return false;
+            if (/[0-9]/.test(t)) return false;
+            if (/^\d{8}$/.test(t)) return false;
+            if (/^\d{4}$/.test(t)) return false;
+            if (/^[0-9a-f]{3,8}$/i.test(t)) return false;
+            return true;
+          })
+          .join(" ");
+        s = s.replace(/[0-9a-z]{10,}/gi, " ").replace(/\s+/g, " ").trim();
+        s = s.replace(/\b(Anime Collection)\s+\1\b/gi, "$1");
+        return s;
+      };
+      const affected = await prisma.card.findMany({ where, select: { id: true, character: true } });
+      for (const c of affected) {
+        const title = sanitizeTitle(c.character);
+        if (!title) continue;
+        // eslint-disable-next-line no-await-in-loop
+        await prisma.card.update({ where: { id: c.id }, data: { name: title, cardTitle: title } });
+      }
+      revalidatePath("/console/shop");
+      revalidatePath("/shop");
+      break;
+    }
+    case "set_public":
+      if (publicVal === "yes" || publicVal === "no") await prisma.card.updateMany({ where, data: { isPublic: publicVal === "yes" } });
+      break;
+    case "set_purch":
+      if (purchVal === "yes" || purchVal === "no") await prisma.card.updateMany({ where, data: { isPurchasable: purchVal === "yes" } });
+      break;
+    case "set_rarity": {
+      if (rarity) {
+        const r = await prisma.rarity.findUnique({ where: { name: rarity } });
+        if (r) {
+          await prisma.card.updateMany({ where, data: { rarity } });
+          const affected = await prisma.card.findMany({ where, select: { id: true, diamondPrice: true } });
+          const chunk = 200;
+          for (let i = 0; i < affected.length; i += chunk) {
+            const slice = affected.slice(i, i + chunk);
+            // eslint-disable-next-line no-await-in-loop
+            await Promise.all(
+              slice.map((x) =>
+                prisma.card.update({
+                  where: { id: x.id },
+                  data: {
+                    diamondPrice: x.diamondPrice == null ? null : Math.max(r.minDiamondPrice, Math.min(r.maxDiamondPrice, x.diamondPrice || 0)),
+                  },
+                })
+              )
+            );
+          }
+        } else {
+          await prisma.card.updateMany({ where, data: { rarity } });
+        }
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  const params = new URLSearchParams({ q, category: categorySlug, purch, pub, page, size });
+  redirect(`/console/shop?${params.toString()}`);
+}
+// Resolve a filesystem path from a stored path or public URL
+function toAbsolutePath(p?: string | null): string | null {
+  if (!p) return null;
+  let s = String(p).trim();
+  if (!s) return null;
+  // URLs are not handled for deletion
+  if (s.startsWith("http://") || s.startsWith("https://")) return null;
+  // Normalize slashes
+  s = s.replace(/\\/g, "/");
+  // Windows absolute like C:/...
+  if (/^[a-zA-Z]:\//.test(s)) return s;
+  // Unix absolute like /home/...
+  if (s.startsWith("/")) {
+    // Site-relative URL: resolve under public/
+    const candidate = path.join(process.cwd(), "public", s.slice(1));
+    return candidate;
+  }
+  // Relative path on disk
+  return path.join(process.cwd(), s);
+}
+
+// Derive thumbnail absolute path from known fields
+function deriveThumbAbs(imagePath?: string | null, thumbnailUrl?: string | null): string | null {
+  // Prefer thumbnailUrl if present
+  const thumbFromUrl = toAbsolutePath(thumbnailUrl);
+  if (thumbFromUrl) return thumbFromUrl;
+  // Fallback: derive from imagePath => insert /thumbs/ and prefix with thumbs_
+  if (!imagePath) return null;
+  let img = String(imagePath).replace(/\\/g, "/").trim();
+  if (!img) return null;
+  // If img is relative, make it absolute first
+  const isAbsWin = /^[a-zA-Z]:\//.test(img);
+  const isAbsUnix = img.startsWith("/");
+  const absImg = isAbsWin || isAbsUnix ? img : path.join(process.cwd(), img);
+  const dir = path.dirname(absImg);
+  const file = path.basename(absImg);
+  const thumbsDir = path.join(dir, "thumbs");
+  const thumbsFile = `thumbs_${file}`;
+  return path.join(thumbsDir, thumbsFile);
+}
+
+async function safeUnlink(p?: string | null) {
+  if (!p) return;
+  try {
+    await fs.unlink(p);
+  } catch {
+    // ignore
+  }
+}
 
 type BadgeTone = "muted" | "success" | "warning";
 function Badge({ children, tone = "muted" }: { children: ReactNode; tone?: BadgeTone }) {
@@ -35,12 +361,38 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
     return typeof v === "string" ? v : "";
   };
   const q = getParam("q").trim();
-  const category = getParam("category").trim();
+  // Use slug-based category like the public frontend (e.g., "anime-collection")
+  const category = getParam("category").trim() || "anime-collection";
   const rarity = getParam("rarity").trim();
   const purch = getParam("purch"); // yes/no
   const pub = getParam("pub"); // yes/no
   const page = Math.max(1, Number(getParam("page") || 1));
   const size = Math.min(100, Math.max(5, Number(getParam("size") || 10)));
+
+  // Map incoming category slug/alias to a Prisma where filter, mirroring /api/cards
+  function normalizeRequestCategory(input: string) {
+    const c = (input || "").toLowerCase();
+    if (c === "anime collection") return "anime-collection";
+    if (c === "star collection") return "star-collection";
+    if (c === "car collection") return "car-collection";
+    if (c === "anime") return "anime-collection";
+    if (c === "star") return "star-collection";
+    if (c === "car") return "car-collection";
+    return c || "anime-collection";
+  }
+  // Build main category filter inline (no external function captures)
+  const eff = normalizeRequestCategory(category || "anime-collection");
+  const friendly = eff === "anime-collection" ? "Anime Collection" : eff === "star-collection" ? "Star Collection" : eff === "car-collection" ? "Car Collection" : eff;
+  const short = eff.split("-")[0];
+  const catWhereMain: Prisma.CardWhereInput | {} = category
+    ? {
+        OR: [
+          { category: { equals: eff, mode: Prisma.QueryMode.insensitive } },
+          { category: { equals: short, mode: Prisma.QueryMode.insensitive } },
+          { category: { equals: friendly, mode: Prisma.QueryMode.insensitive } },
+        ],
+      }
+    : {};
 
   const where: Prisma.CardWhereInput | undefined = (q || category || rarity || purch || pub)
     ? {
@@ -55,7 +407,7 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
                 ],
               }
             : {},
-          category ? { category } : {},
+          catWhereMain as any,
           rarity ? { rarity } : {},
           purch ? { isPurchasable: purch === "yes" } : {},
           pub ? { isPublic: pub === "yes" } : {},
@@ -63,11 +415,20 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
       }
     : undefined;
 
-  const [total, cards, categories, rarities] = await Promise.all([
+  const [total, cards, categories, rarities, categoryTotal] = await Promise.all([
     prisma.card.count({ where }),
-    prisma.card.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (page - 1) * size, take: size }),
-    prisma.category.findMany({ where: { isActive: true }, select: { name: true }, orderBy: { name: "asc" } }),
+    prisma.card.findMany({
+      where,
+      orderBy: [
+        { updatedAt: "desc" as const },
+        { id: "desc" as const },
+      ],
+      skip: (page - 1) * size,
+      take: size,
+    }),
+    prisma.category.findMany({ where: { isActive: true }, select: { name: true, slug: true }, orderBy: { name: "asc" } }),
     prisma.rarity.findMany({ where: { isActive: true }, select: { name: true, level: true }, orderBy: { level: "asc" } }),
+    prisma.card.count({ where: catWhereMain as any }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / size));
@@ -84,6 +445,10 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
     return `?${params.toString()}`;
   }
 
+  // Build signed image URLs for secure proxying (thumbnail/preview)
+  const signedThumb = (id: string) => `/api/secure-image?cardId=${encodeURIComponent(id)}&type=thumbnail&token=${encodeURIComponent(generateImageToken(id, "thumbnail"))}`;
+  const signedPreview = (id: string) => `/api/secure-image?cardId=${encodeURIComponent(id)}&type=preview&token=${encodeURIComponent(generateImageToken(id, "preview"))}`;
+
   return (
     <div className="px-4 py-6 max-w-6xl mx-auto space-y-6">
       <h1 className="text-xl font-semibold">Shop — Cards Admin</h1>
@@ -97,11 +462,8 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
           <form method="get" className="grid sm:grid-cols-2 lg:grid-cols-8 gap-2">
             <input name="q" placeholder="Search name, series, character" defaultValue={q} className="border rounded-md px-3 py-2" />
             <select name="category" defaultValue={category} className="border rounded-md px-3 py-2">
-              <option value="">All categories</option>
               {categories.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}
-                </option>
+                <option key={(c as any).slug} value={(c as any).slug}>{c.name}</option>
               ))}
             </select>
             <select name="rarity" defaultValue={rarity} className="border rounded-md px-3 py-2">
@@ -137,346 +499,313 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
 
       <UICard>
         <CardHeader className="rounded-t-lg bg-gradient-to-r from-indigo-600 via-sky-600 to-emerald-600 text-white shadow">
-          <details>
-            <summary className="cursor-pointer list-none">
-              <CardTitle className="text-base inline">Bulk image upload</CardTitle>
-              <span className="ml-2 align-middle text-xs text-muted-foreground">(click to expand)</span>
-              <CardDescription>Upload one or more images and choose a category. Other fields are set automatically.</CardDescription>
-            </summary>
-          </details>
+          <CardTitle className="text-base inline">Bulk image upload</CardTitle>
+          <CardDescription>Upload one or more images into a required category.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form
-            action={async (formData: FormData) => {
+          {/* Server action passed to client for uploading */}
+          <BulkUploadClient
+            categories={categories as any}
+            defaultCategory={"anime-collection"}
+            onUpload={async (formData: FormData) => {
               "use server";
-              const categoryName = String(formData.get("category") || "").trim();
-              const files = formData.getAll("images");
-              if (!files || files.length === 0) return;
+              try {
+                const categorySlug = String(formData.get("uploadCategory") || "").trim();
+                const files = formData.getAll("images");
+                const doAnalyze = String(formData.get("analyzeAfter") || "") === "on";
+                if (!categorySlug || !files || files.length === 0) return { createdIds: [] };
 
-              // Resolve category slug for directory structure
-              const cat = categoryName
-                ? await prisma.category.findUnique({ where: { name: categoryName }, select: { slug: true, name: true } })
-                : null;
-              const categorySlug = cat?.slug || (categoryName ? categoryName.toLowerCase().replace(/[^a-z0-9]+/g, "-") : "uncategorized");
+                const cat = await prisma.category.findUnique({ where: { slug: categorySlug }, select: { slug: true, name: true } });
+                const effectiveSlug = cat?.slug || categorySlug;
 
-              // Base directories
-              const baseDir = path.join(process.cwd(), "public", "uploads", "categories", categorySlug);
-              const thumbsDir = path.join(baseDir, "thumbs");
-              await fs.mkdir(baseDir, { recursive: true });
-              await fs.mkdir(thumbsDir, { recursive: true });
+                const baseDir = path.join(process.cwd(), "public", "uploads", "categories", effectiveSlug);
+                const thumbsDir = path.join(baseDir, "thumbs");
+                await fs.mkdir(baseDir, { recursive: true });
+                await fs.mkdir(thumbsDir, { recursive: true });
 
-              const safeName = (name: string) => name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+                const safeName = (name: string) => name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+                const safeTitle = (input: string) => {
+                  let s = String(input || "");
+                  s = s.replace(/^\d{6,}[_-][0-9a-f]{4,}[_-]/i, "");
+                  s = s.replace(/[_-]+/g, " ");
+                  s = s
+                    .split(/\s+/)
+                    .filter((tok) => {
+                      const t = tok.trim();
+                      if (!t) return false;
+                      if (/^\d{4,}$/i.test(t)) return false; // numbers 4+
+                      if (/^[0-9a-f]{4,}$/i.test(t)) return false; // hex 4+
+                      if (/^[0-9a-z]{8,}$/i.test(t)) return false; // mixed alnum blobs
+                      if (/[0-9]/.test(t)) return false; // any digits
+                      if (/^\d{8}$/.test(t)) return false; // yyyymmdd-like
+                      if (/^\d{4}$/.test(t)) return false; // short stamp like 2110
+                      if (/^[0-9a-f]{3,8}$/i.test(t)) return false; // uuid small chunks
+                      return true;
+                    })
+                    .join(" ");
+                  s = s.replace(/[0-9a-z]{10,}/gi, " ").replace(/\s+/g, " ").trim();
+                  s = s.replace(/\b(Anime Collection)\s+\1\b/gi, "$1");
+                  return s;
+                };
 
-              for (const f of files) {
-                if (!f || typeof f === "string") continue;
-                const file = f as unknown as File;
-                const arrayBuf = await file.arrayBuffer();
-                const buf = Buffer.from(arrayBuf);
-
-                // Duplicate detection by file hash
-                const fileHash = crypto.createHash("sha256").update(buf).digest("hex");
-                const existing = await prisma.card.findFirst({ where: { fileHash } });
-                if (existing) {
-                  // Skip duplicates silently for now
-                  continue;
+                let activeRarities: Array<{ name: string; slug: string; level: number; minDiamondPrice: number; maxDiamondPrice: number; dropRate?: number }> = [];
+                let activeElements: Array<{ name: string; slug: string }> = [];
+                if (doAnalyze) {
+                  try {
+                    activeRarities = await prisma.rarity.findMany({
+                      where: { isActive: true },
+                      orderBy: { level: "asc" },
+                      select: { name: true, slug: true, level: true, minDiamondPrice: true, maxDiamondPrice: true, dropRate: true },
+                    });
+                  } catch {}
+                  try {
+                    activeElements = await prisma.element.findMany({
+                      where: { isActive: true },
+                      orderBy: { sortOrder: "asc" },
+                      select: { name: true, slug: true },
+                    });
+                  } catch {}
                 }
 
-                // Process image with sharp: normalize, resize, convert to JPEG
-                let processed: Buffer;
-                try {
-                  const img = sharp(buf).flatten({ background: { r: 255, g: 255, b: 255 } }).rotate();
-                  const metadata = await img.metadata();
-                  const w = metadata.width || 0;
-                  const h = metadata.height || 0;
-                  const maxW = 800;
-                  const maxH = 1200;
-                  const resized = img.resize({ width: w && w > maxW ? maxW : undefined, height: h && h > maxH ? maxH : undefined, fit: "inside", withoutEnlargement: true });
-                  processed = await resized.jpeg({ quality: 84, mozjpeg: true }).toBuffer();
-                } catch {
-                  // If sharp fails, fallback to original buffer
-                  processed = buf;
+                const pickRarity = () => {
+                  if (!activeRarities.length) return { name: null as any, slug: null as any, minDiamondPrice: 50, maxDiamondPrice: 150 };
+                  const weights = activeRarities.map((r) => Math.max(0.0001, (r as any).dropRate ?? 100));
+                  const total = weights.reduce((a, b) => a + b, 0);
+                  let roll = Math.random() * total;
+                  for (let i = 0; i < activeRarities.length; i++) {
+                    if ((roll -= weights[i]) <= 0) return activeRarities[i] as any;
+                  }
+                  return activeRarities[activeRarities.length - 1] as any;
+                };
+
+                const randBetween = (min: number, max: number) => Math.floor(min + Math.random() * (Math.max(max, min) - min + 1));
+
+                const createdIds: string[] = [];
+                const errors: Array<{ fileName: string; message: string }> = [];
+
+                for (const f of files) {
+                  if (!f || typeof f === "string") continue;
+                  const file = f as unknown as File;
+                  const arrayBuf = await file.arrayBuffer();
+                  const buf = Buffer.from(arrayBuf);
+
+                  const fileHash = crypto.createHash("sha256").update(buf).digest("hex");
+                  const existing = await prisma.card.findFirst({ where: { fileHash } });
+                  if (existing) {
+                    errors.push({ fileName: file.name, message: "Duplicate skipped" });
+                    continue;
+                  }
+
+                  let processed: Buffer;
+                  try {
+                    const sharp = (await import("sharp")).default;
+                    const img = sharp(buf).flatten({ background: { r: 255, g: 255, b: 255 } }).rotate();
+                    const metadata = await img.metadata();
+                    const w = metadata.width || 0;
+                    const h = metadata.height || 0;
+                    const maxW = 800;
+                    const maxH = 1200;
+                    const resized = img.resize({ width: w && w > maxW ? maxW : undefined, height: h && h > maxH ? maxH : undefined, fit: "inside", withoutEnlargement: true });
+                    processed = await resized.jpeg({ quality: 84, mozjpeg: true }).toBuffer();
+                  } catch {
+                    processed = buf;
+                  }
+
+                  let thumb: Buffer;
+                  try {
+                    const sharp = (await import("sharp")).default;
+                    thumb = await sharp(processed).resize({ height: 300, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80, mozjpeg: true }).toBuffer();
+                  } catch {
+                    thumb = processed;
+                  }
+
+                  const stamp = Date.now();
+                  const rand = crypto.randomBytes(6).toString("hex");
+                  const base = safeName(file.name || `img_${stamp}.jpg`).replace(/\.(png|jpeg|jpg|webp|gif|bmp|tiff)$/i, "");
+                  const filename = `${stamp}_${rand}_${base}.jpg`;
+                  const thumbFilename = `thumbs_${filename}`;
+
+                  const outPath = path.join(baseDir, filename);
+                  const thumbPath = path.join(thumbsDir, thumbFilename);
+                  await fs.writeFile(outPath, processed);
+                  await fs.writeFile(thumbPath, thumb);
+
+                  const relBase = `/uploads/categories/${effectiveSlug}`;
+                  const imageUrl = `${relBase}/${filename}`;
+                  const thumbnailUrl = `${relBase}/thumbs/${thumbFilename}`;
+
+                  const created = await prisma.card.create({
+                    data: {
+                      name: null,
+                      series: null,
+                      character: null,
+                      diamondPrice: 0,
+                      rarity: null as any,
+                      category: effectiveSlug as any,
+                      isPublic: true,
+                      isPurchasable: true,
+                      uploadDate: new Date(),
+                      imageUrl,
+                      thumbnailUrl,
+                      maxOwners: null as any,
+                      imagePath: outPath,
+                      fileName: filename,
+                      fileSize: processed.length,
+                      fileHash,
+                      imageHash: fileHash,
+                    },
+                  });
+                  createdIds.push(created.id);
+
+                  if (doAnalyze) {
+                    const chosen = pickRarity();
+                    const rarityName = (chosen as any).name ?? (chosen as any).slug ?? null;
+                    const priceMin = (chosen as any).minDiamondPrice ?? 50;
+                    const priceMax = (chosen as any).maxDiamondPrice ?? 200;
+                    const element = activeElements.length ? activeElements[Math.floor(Math.random() * activeElements.length)].slug : null;
+                    const baseTitle = safeTitle(base.replace(/[_-]+/g, " ").trim());
+                    const rawTitle = baseTitle ? `${(cat?.name || effectiveSlug).replace(/-/g, " ")} ${baseTitle}` : (cat?.name || effectiveSlug);
+                    const title = safeTitle(rawTitle.replace(/-/g, " "));
+
+                    await prisma.card.update({
+                      where: { id: created.id },
+                      data: {
+                        name: title,
+                        series: cat?.name || effectiveSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+                        character: null,
+                        rarity: rarityName as any,
+                        cardTitle: title,
+                        attackPower: randBetween(40, 120),
+                        defense: randBetween(30, 110),
+                        speed: randBetween(20, 100),
+                        element: element as any,
+                        rating: Math.round((Math.random() * 4 + 1) * 10) / 10,
+                        diamondPrice: randBetween(priceMin, priceMax),
+                        isAnalyzed: true,
+                        confidence: 75,
+                        estimatedValue: randBetween(50, 500),
+                      },
+                    });
+                  }
                 }
 
-                // Thumbnail (height 300px, keep aspect)
-                let thumb: Buffer;
-                try {
-                  thumb = await sharp(processed).resize({ height: 300, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 80, mozjpeg: true }).toBuffer();
-                } catch {
-                  thumb = processed;
-                }
-
-                const stamp = Date.now();
-                const rand = crypto.randomBytes(6).toString("hex");
-                const base = safeName(file.name || `img_${stamp}.jpg`).replace(/\.(png|jpeg|jpg|webp|gif|bmp|tiff)$/i, "");
-                const filename = `${stamp}_${rand}_${base}.jpg`;
-
-                const outPath = path.join(baseDir, filename);
-                const thumbPath = path.join(thumbsDir, filename);
-                await fs.writeFile(outPath, processed);
-                await fs.writeFile(thumbPath, thumb);
-
-                const relBase = `/uploads/categories/${categorySlug}`;
-                const imageUrl = `${relBase}/${filename}`;
-                const thumbnailUrl = `${relBase}/thumbs/${filename}`;
-
-                await prisma.card.create({
-                  data: {
-                    name: null,
-                    series: null,
-                    character: null,
-                    diamondPrice: 0,
-                    rarity: null as any,
-                    category: (cat?.name || categoryName || null) as any,
-                    isPublic: true,
-                    isPurchasable: true,
-                    imageUrl,
-                    thumbnailUrl,
-                    maxOwners: null as any,
-                    imagePath: outPath,
-                    fileName: filename,
-                    fileSize: processed.length,
-                    fileHash,
-                    imageHash: fileHash,
-                  },
-                });
+                revalidatePath("/console/shop");
+                revalidatePath("/shop");
+                return { createdIds, errors } as { createdIds: string[]; errors?: Array<{ fileName: string; message: string }> };
+              } catch (err: any) {
+                console.error("[BulkUpload] Failed to process images:", err);
+                return { createdIds: [], errors: [{ fileName: "(all)", message: err?.message || "Upload failed" }] };
               }
             }}
-            className="grid gap-3"
-          >
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 items-end">
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Select images</label>
-                <input name="images" type="file" accept="image/*" multiple className="block" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Category</label>
-                <select name="category" className="border rounded-md px-2 py-1">
-                  <option value="">(none)</option>
-                  {categories.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
-                  ))}
+          />
+        </CardContent>
+      </UICard>
+
+
+      {/* Server-rendered bulk filtered actions (avoid client wrappers around form) */}
+      <section className="rounded-lg border bg-background/60 shadow">
+        <div className="rounded-t-lg bg-gradient-to-r from-indigo-600 via-sky-600 to-emerald-600 text-white shadow px-4 py-3">
+          <div className="text-base font-semibold">Bulk actions</div>
+          <div className="opacity-90 text-sm">Apply to all filtered results</div>
+        </div>
+        <div className="space-y-3 p-3">
+          <div className="text-sm text-muted-foreground">Apply an action to all filtered results below.</div>
+          <form action={bulkFilteredAction} className="grid sm:grid-cols-2 lg:grid-cols-6 gap-2">
+              <input type="hidden" name="q" value={q} />
+              <input type="hidden" name="category" value={category} />
+              <input type="hidden" name="rarity" value={rarity} />
+              <input type="hidden" name="purch" value={purch} />
+              <input type="hidden" name="pub" value={pub} />
+              <input type="hidden" name="size" value={String(size)} />
+              <input type="hidden" name="page" value={String(page)} />
+
+              <div className="flex gap-2">
+                <select name="field" className="border rounded-md px-3 py-2">
+                  <option value="isPurchasable">Set Purchasable</option>
+                  <option value="isPublic">Set Public</option>
+                </select>
+                <select name="value" className="border rounded-md px-3 py-2">
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
                 </select>
               </div>
-              <div>
-                <button className="px-3 py-2 rounded-md border">Import</button>
+
+              <select name="setRarity" defaultValue="" className="border rounded-md px-3 py-2">
+                <option value="">(no change) Set rarity…</option>
+                {rarities.map((r) => (
+                  <option key={r.name} value={r.name}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Category change disabled */}
+
+              <div className="sm:col-span-2 lg:col-span-6 flex flex-wrap items-center gap-2">
+                <label className="text-xs text-muted-foreground" htmlFor="clean_limit">Batch size</label>
+                <select id="clean_limit" name="clean_limit" defaultValue="500" className="border rounded-md px-2 py-2 text-xs">
+                  {[100,200,500,1000,2000].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <button type="submit" name="op" value="apply" className="px-3 py-2 rounded-md border">Apply to filtered</button>
+                <button type="submit" name="op" value="clean_titles" className="px-3 py-2 rounded-md border bg-amber-500/10 hover:bg-amber-500/20">Clean titles</button>
+                <button type="submit" name="op" value="title_from_character" className="px-3 py-2 rounded-md border bg-indigo-500/10 hover:bg-indigo-500/20">Title = Character</button>
+                <button type="submit" name="op" value="backfill_uploaddate" className="px-3 py-2 rounded-md border bg-emerald-500/10 hover:bg-emerald-500/20">Backfill uploadDate</button>
               </div>
-            </div>
-          </form>
-        </CardContent>
-      </UICard>
+            </form>
+        </div>
+      </section>
 
-
-      <UICard>
-        <CardHeader className="rounded-t-lg bg-gradient-to-r from-indigo-600 via-sky-600 to-emerald-600 text-white shadow">
-          <CardTitle className="text-base">Bulk actions</CardTitle>
-          <CardDescription>Apply to all filtered results</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <details>
-            <summary className="cursor-pointer text-sm text-muted-foreground">Show bulk actions</summary>
-          <form
-            action={async (formData: FormData) => {
-              "use server";
-              const q = String(formData.get("q") || "").trim();
-              const category = String(formData.get("category") || "").trim();
-              const rarity = String(formData.get("rarity") || "").trim();
-              const purch = String(formData.get("purch") || "");
-              const pub = String(formData.get("pub") || "");
-              const field = String(formData.get("field") || "");
-              const value = String(formData.get("value") || "");
-              const setRarity = String(formData.get("setRarity") || "").trim();
-              const setCategory = String(formData.get("setCategory") || "").trim();
-
-              const where: Prisma.CardWhereInput | undefined = (q || category || rarity || purch || pub)
-                ? {
-                    AND: [
-                      q
-                        ? {
-                            OR: [
-                              { name: { contains: q, mode: Prisma.QueryMode.insensitive } },
-                              { cardTitle: { contains: q, mode: Prisma.QueryMode.insensitive } },
-                              { series: { contains: q, mode: Prisma.QueryMode.insensitive } },
-                              { character: { contains: q, mode: Prisma.QueryMode.insensitive } },
-                            ],
-                          }
-                        : {},
-                      category ? { category } : {},
-                      rarity ? { rarity } : {},
-                      purch ? { isPurchasable: purch === "yes" } : {},
-                      pub ? { isPublic: pub === "yes" } : {},
-                    ],
-                  }
-                : undefined;
-
-              if (field === "isPurchasable") {
-                await prisma.card.updateMany({ where, data: { isPurchasable: value === "yes" } });
-              } else if (field === "isPublic") {
-                await prisma.card.updateMany({ where, data: { isPublic: value === "yes" } });
-              }
-
-              if (setRarity) {
-                await prisma.card.updateMany({ where, data: { rarity: setRarity } });
-              }
-              if (setCategory) {
-                await prisma.card.updateMany({ where, data: { category: setCategory } });
-              }
-            }}
-            className="grid sm:grid-cols-2 lg:grid-cols-6 gap-2"
-          >
-            <input type="hidden" name="q" value={q} />
-            <input type="hidden" name="category" value={category} />
-            <input type="hidden" name="rarity" value={rarity} />
-            <input type="hidden" name="purch" value={purch} />
-            <input type="hidden" name="pub" value={pub} />
-
-            <div className="flex gap-2">
-              <select name="field" className="border rounded-md px-3 py-2">
-                <option value="isPurchasable">Set Purchasable</option>
-                <option value="isPublic">Set Public</option>
-              </select>
-              <select name="value" className="border rounded-md px-3 py-2">
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </div>
-
-            <select name="setRarity" defaultValue="" className="border rounded-md px-3 py-2">
-              <option value="">(no change) Set rarity…</option>
-              {rarities.map((r) => (
-                <option key={r.name} value={r.name}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-
-            <select name="setCategory" defaultValue="" className="border rounded-md px-3 py-2">
-              <option value="">(no change) Set category…</option>
-              {categories.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-
-            <div className="sm:col-span-2 lg:col-span-6">
-              <button className="px-3 py-2 rounded-md border">Apply to filtered</button>
-            </div>
-          </form>
-          </details>
-        </CardContent>
-      </UICard>
+      {/* Server-rendered bulk selected actions placed outside client components */}
+      <form
+        id="bulkForm"
+        action={bulkSelectedAction}
+        className="z-0 rounded-md p-2 mt-3 mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground bg-background/60 border"
+      >
+        <select name="bulk_action" className="border rounded px-2 h-8">
+          <option value="set_rarity">Set Rarity</option>
+          <option value="set_public">Set Public</option>
+          <option value="set_purch">Set Purchasable</option>
+          <option value="title_from_character">Title = Character</option>
+          <option value="delete">Delete</option>
+        </select>
+        {/* Preserve current filters for redirect */}
+        <input type="hidden" name="q" value={q} />
+        <input type="hidden" name="category" value={category} />
+        <input type="hidden" name="purch" value={purch} />
+        <input type="hidden" name="pub" value={pub} />
+        <input type="hidden" name="size" value={String(size)} />
+        <input type="hidden" name="page" value={String(page)} />
+        <select name="bulk_rarity" className="border rounded px-2 h-8">
+          <option value="">(none)</option>
+          {rarities.map((r) => (
+            <option key={r.name} value={r.name}>{r.name}</option>
+          ))}
+        </select>
+        <select name="bulk_public" className="border rounded px-2 h-8">
+          <option value="">Public?</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+        <select name="bulk_purch" className="border rounded px-2 h-8">
+          <option value="">Purchasable?</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+        <button className="px-3 h-8 rounded border text-xs text-foreground/80 hover:bg-muted" type="submit">Apply</button>
+      </form>
 
       <UICard>
         <CardHeader className="rounded-t-lg bg-gradient-to-r from-indigo-600 via-sky-600 to-emerald-600 text-white shadow">
-          <CardTitle className="text-base">Cards ({cards.length})</CardTitle>
+          <CardTitle className="text-base">Cards ({categoryTotal})</CardTitle>
           <CardDescription>Edit properties inline</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Bulk selection toolbar */}
-          <details className="mb-1">
-            <summary className="list-none cursor-pointer text-xs text-muted-foreground/80 hover:text-foreground/80 px-1 py-1 inline-flex items-center gap-2 select-none">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-              <span>Bulk actions</span>
-            </summary>
-            <form
-              id="bulkForm"
-              action={async (formData: FormData) => {
-                "use server";
-                const ids = formData.getAll("ids").map(String).filter(Boolean);
-                const action = String(formData.get("bulk_action") || "");
-                const rarity = String(formData.get("bulk_rarity") || "").trim();
-                const category = String(formData.get("bulk_category") || "").trim();
-                const publicVal = String(formData.get("bulk_public") || ""); // yes/no/""
-                const purchVal = String(formData.get("bulk_purch") || ""); // yes/no/""
-                if (ids.length === 0) return;
-                const where = { id: { in: ids } } as any;
-                switch (action) {
-                  case "delete":
-                    await prisma.card.deleteMany({ where });
-                    break;
-                  case "set_public":
-                    if (publicVal === "yes" || publicVal === "no") {
-                      await prisma.card.updateMany({ where, data: { isPublic: publicVal === "yes" } });
-                    }
-                    break;
-                  case "set_purch":
-                    if (purchVal === "yes" || purchVal === "no") {
-                      await prisma.card.updateMany({ where, data: { isPurchasable: purchVal === "yes" } });
-                    }
-                    break;
-                  case "set_category":
-                    if (category) await prisma.card.updateMany({ where, data: { category } });
-                    break;
-                  case "set_rarity":
-                    if (rarity) {
-                      // Clamp prices to new rarity bounds if price exists
-                      const r = await prisma.rarity.findUnique({ where: { name: rarity } });
-                      if (r) {
-                        // Update rarity first
-                        await prisma.card.updateMany({ where, data: { rarity } });
-                        // Best-effort clamp by fetching and updating in small batches
-                        const affected = await prisma.card.findMany({ where, select: { id: true, diamondPrice: true } });
-                        const chunk = 200;
-                        for (let i = 0; i < affected.length; i += chunk) {
-                          const slice = affected.slice(i, i + chunk);
-                          // eslint-disable-next-line no-await-in-loop
-                          await Promise.all(
-                            slice.map((x) =>
-                              prisma.card.update({
-                                where: { id: x.id },
-                                data: {
-                                  diamondPrice:
-                                    x.diamondPrice == null
-                                      ? null
-                                      : Math.max(r.minDiamondPrice, Math.min(r.maxDiamondPrice, x.diamondPrice || 0)),
-                                },
-                              })
-                            )
-                          );
-                        }
-                      } else {
-                        await prisma.card.updateMany({ where, data: { rarity } });
-                      }
-                    }
-                    break;
-                  default:
-                    break;
-                }
-              }}
-              className="z-0 rounded-md p-2 mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground bg-background/60 border"
-            >
-              <select name="bulk_action" className="border rounded px-2 h-8">
-                <option value="set_category">Set Category</option>
-                <option value="set_rarity">Set Rarity</option>
-                <option value="set_public">Set Public</option>
-                <option value="set_purch">Set Purchasable</option>
-                <option value="delete">Delete</option>
-              </select>
-              <select name="bulk_category" className="border rounded px-2 h-8">
-                <option value="">(none)</option>
-                {categories.map((cat) => (
-                  <option key={cat.name} value={cat.name}>{cat.name}</option>
-                ))}
-              </select>
-              <select name="bulk_rarity" className="border rounded px-2 h-8">
-                <option value="">(none)</option>
-                {rarities.map((r) => (
-                  <option key={r.name} value={r.name}>{r.name}</option>
-                ))}
-              </select>
-              <select name="bulk_public" className="border rounded px-2 h-8">
-                <option value="">Public?</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-              <select name="bulk_purch" className="border rounded px-2 h-8">
-                <option value="">Purchasable?</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-              <button className="px-3 h-8 rounded border text-xs text-foreground/80 hover:bg-muted" type="submit">Apply</button>
-            </form>
-          </details>
+          {/* Reanalyze controls for failed/late analysis */}
+          <div className="z-0 rounded-md p-2 mt-1 flex items-center justify-between text-xs bg-background/60 border">
+            <div className="text-muted-foreground">Run AI analysis again if previous attempt failed.</div>
+            <ReanalyzeButtons visibleIds={cards.map((c) => c.id)} bulkFormId="bulkForm" />
+          </div>
+          {/* Bulk selection toolbar moved above; checkboxes below still use form="bulkForm" */}
           {cards.length === 0 && <div className="text-sm text-muted-foreground">No cards found.</div>}
           {cards.length > 0 && (
             <div className="overflow-auto border rounded-md">
@@ -487,8 +816,7 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
                       {/* Placeholder for select-all in future */}
                     </th>
                     <th className="text-left font-medium px-2 py-1 w-24">Image</th>
-                    <th className="text-left font-medium px-2 py-1">Name</th>
-                    <th className="text-left font-medium px-2 py-1">Series</th>
+                    {/* Name and Series removed */}
                     <th className="text-left font-medium px-2 py-1">Character</th>
                     <th className="text-left font-medium px-2 py-1">Rarity</th>
                     <th className="text-left font-medium px-2 py-1">Category</th>
@@ -504,48 +832,16 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
                         <input form="bulkForm" type="checkbox" name="ids" value={c.id} />
                       </td>
                       <td className="px-2 py-1">
-                        {c.thumbnailUrl || c.imageUrl ? (
+                        {c.id ? (
                           <ImagePreview
-                            src={(c.imageUrl || c.thumbnailUrl) as string}
-                            thumbSrc={(c.thumbnailUrl || c.imageUrl) as string}
+                            src={signedPreview(c.id)}
+                            thumbSrc={signedThumb(c.id)}
                             alt={c.name || c.cardTitle || "card"}
                             size={64}
                           />
                         ) : null}
                       </td>
-                      <td className="px-2 py-1">
-                        <form
-                          action={async (formData: FormData) => {
-                            "use server";
-                            const name = String(formData.get("name") || c.name || "").trim();
-                            const series = String(formData.get("series") || c.series || "").trim();
-                            const character = String(formData.get("character") || c.character || "").trim();
-                            let diamondPrice = Number(formData.get("diamondPrice") || c.diamondPrice || 0);
-                            const rarity = String(formData.get("rarity") || c.rarity || "").trim();
-                            const category = String(formData.get("category") || c.category || "").trim();
-                            const maxOwners = formData.get("maxOwners");
-                            const maxOwnersVal = maxOwners === null || String(maxOwners).trim() === "" ? null : Number(maxOwners);
-
-                            if (rarity) {
-                              const r = await prisma.rarity.findUnique({ where: { name: rarity } });
-                              if (r) {
-                                diamondPrice = Math.max(r.minDiamondPrice, Math.min(r.maxDiamondPrice, diamondPrice));
-                              }
-                            }
-                            await prisma.card.update({
-                              where: { id: c.id },
-                              data: { name, series, character, diamondPrice, rarity, category, maxOwners: maxOwnersVal as any },
-                            });
-                          }}
-                        >
-                          <input name="name" defaultValue={c.name || ""} className="w-full h-8 px-2 rounded border border-border bg-background/60 text-xs" />
-                        </form>
-                      </td>
-                      <td className="px-2 py-2">
-                        <form action={async (formData: FormData) => {"use server"; await prisma.card.update({ where: { id: c.id }, data: { series: String(formData.get("series") || "").trim() } });}}>
-                          <input name="series" defaultValue={c.series || ""} className="w-full h-8 px-2 rounded border border-border bg-background/60 text-xs" />
-                        </form>
-                      </td>
+                      {/* Name and Series cells removed */}
                       <td className="px-2 py-2">
                         <form action={async (formData: FormData) => {"use server"; await prisma.card.update({ where: { id: c.id }, data: { character: String(formData.get("character") || "").trim() } });}}>
                           <input name="character" defaultValue={c.character || ""} className="w-full h-8 px-2 rounded border border-border bg-background/60 text-xs" />
@@ -569,18 +865,15 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
                             {rarities.map((r) => (
                               <option key={r.name} value={r.name}>{r.name}</option>
                             ))}
+                            {/* Ensure existing value is selectable even if inactive */}
+                            {c.rarity && !rarities.some((r) => r.name === c.rarity) && (
+                              <option value={c.rarity}>{c.rarity}</option>
+                            )}
                           </select>
                         </form>
                       </td>
                       <td className="px-2 py-2">
-                        <form action={async (formData: FormData) => {"use server"; await prisma.card.update({ where: { id: c.id }, data: { category: String(formData.get("category") || "").trim() } });}}>
-                          <select name="category" defaultValue={c.category || ""} className="w-full h-8 px-2 rounded border border-border bg-background/60 text-xs">
-                            <option value="">(none)</option>
-                            {categories.map((cat) => (
-                              <option key={cat.name} value={cat.name}>{cat.name}</option>
-                            ))}
-                          </select>
-                        </form>
+                        <span className="inline-block px-2 py-1 rounded bg-muted text-[11px] text-muted-foreground">{c.category || "(none)"}</span>
                       </td>
                       <td className="px-2 py-2">
                         <form
@@ -605,7 +898,20 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
                       </td>
                       <td className="px-2 py-2">
                         <ConfirmDeleteButton
-                          action={async () => {"use server"; await prisma.card.delete({ where: { id: c.id } });}}
+                          action={async () => {
+                            "use server";
+                            try {
+                              const card = await prisma.card.findUnique({ where: { id: c.id }, select: { id: true, imagePath: true, thumbnailUrl: true, imageUrl: true } });
+                              if (card) {
+                                const absImg = toAbsolutePath((card as any).imagePath) || toAbsolutePath((card as any).imageUrl);
+                                const absThumb = deriveThumbAbs((card as any).imagePath, (card as any).thumbnailUrl);
+                                await Promise.all([safeUnlink(absThumb), safeUnlink(absImg)]);
+                              }
+                            } catch {}
+                            await prisma.card.delete({ where: { id: c.id } });
+                            revalidatePath("/console/shop");
+                            revalidatePath("/shop");
+                          }}
                           title="Delete card"
                           description="This will permanently delete the card."
                         />

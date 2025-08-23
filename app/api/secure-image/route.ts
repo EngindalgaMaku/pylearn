@@ -16,6 +16,13 @@ function normalizePublicPath(p?: string | null): string | null {
   // Normalize slashes
   s = s.replace(/\\/g, "/")
 
+  // If looks like an absolute filesystem path (Windows C:/... or Unix /home/..), keep as-is
+  const isWinAbs = /^[a-zA-Z]:\//.test(s)
+  const isUnixAbs = s.startsWith("/") && !s.startsWith("//")
+  if (isWinAbs || isUnixAbs) {
+    return s
+  }
+
   // Strip "public/" prefix
   s = s.replace(/^public\//, "/")
 
@@ -27,6 +34,14 @@ function normalizePublicPath(p?: string | null): string | null {
 
 function resolveOnDisk(relativeUrl: string | null): string | null {
   if (!relativeUrl) return null
+  // If absolute filesystem path, use directly
+  const absCheck = relativeUrl.replace(/\\/g, "/")
+  const isWinAbs = /^[a-zA-Z]:\//.test(absCheck)
+  const isUnixAbs = absCheck.startsWith("/") && !absCheck.startsWith("//") && !absCheck.startsWith("/uploads/")
+  if (isWinAbs || isUnixAbs) {
+    return existsSync(absCheck) ? absCheck : null
+  }
+
   const clean = relativeUrl.startsWith("/") ? relativeUrl.slice(1) : relativeUrl
 
   // Try candidate locations
@@ -94,10 +109,32 @@ export async function GET(request: NextRequest) {
     const normalizedThumb = normalizePublicPath((card as any).thumbnailUrl)
     const normalizedFull = normalizePublicPath((card as any).imagePath)
     const normalizedUrl = normalizePublicPath((card as any).imageUrl)
+
+    // Derive a thumbnail path if missing: /uploads/categories/<slug>/thumbs/thumbs_<file>
+    function deriveThumb(fromFull: string | null): string | null {
+      if (!fromFull) return null
+      try {
+        // Expect something like /uploads/categories/<slug>/<file>
+        const parts = fromFull.split("/").filter(Boolean)
+        const file = parts.pop() || ""
+        if (!file) return null
+        const thumbsFile = `thumbs_${file}`
+        // If path already contains 'thumbs', just return it
+        if (parts[parts.length - 1] === "thumbs") {
+          return "/" + [...parts, thumbsFile].join("/")
+        }
+        // Insert thumbs directory at end
+        return "/" + [...parts, "thumbs", thumbsFile].join("/")
+      } catch {
+        return null
+      }
+    }
+
+    const computedThumb = normalizedThumb || deriveThumb(normalizedFull)
     const candidates: (string | null)[] =
       type === "thumbnail"
-        ? [normalizedThumb, normalizedUrl, normalizedFull]
-        : [normalizedFull, normalizedUrl, normalizedThumb] // full and preview prefer full first
+        ? [computedThumb, normalizedUrl, normalizedFull]
+        : [normalizedFull, normalizedUrl, computedThumb] // full and preview prefer full first
 
     // Try each candidate: proxy remote or read local
     for (const candidatePath of candidates) {
