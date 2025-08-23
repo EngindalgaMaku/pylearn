@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -89,6 +90,7 @@ function generatePool(): LQ[] {
 function shuffle<T>(a: T[]): T[] { const c = a.slice(); for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random()* (i+1)); [c[i], c[j]] = [c[j], c[i]] } return c }
 
 export default function LoopRunnerGame() {
+  const { data: session, update } = useSession()
   const { toast } = useToast()
   const pool = useMemo(() => generatePool(), [])
   const questions = useMemo(() => shuffle(pool).slice(0, 6).map(q => ({ ...q, options: shuffle(q.options) })), [pool])
@@ -101,6 +103,7 @@ export default function LoopRunnerGame() {
   const QUESTION_TIME = 20
   const runStartRef = useRef<number | null>(null)
   const postedRef = useRef(false)
+  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
   const { timeLeft, bonusXP, lastBonus, markQuestionStart, registerAnswerCorrect, resetBonuses } = useSpeedTimer(
     QUESTION_TIME,
     started,
@@ -131,13 +134,23 @@ export default function LoopRunnerGame() {
       const startedAt = runStartRef.current ?? Date.now()
       const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
       try {
-        await fetch("/api/games/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameKey: "loop-runner", score, correctCount: score, durationSec, bonusXP }) })
+        const res = await fetch("/api/games/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameKey: "loop-runner", score, correctCount: score, durationSec, bonusXP }) })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json().catch(() => ({}))
+        const xp = data?.rewards?.xp ?? 0
+        const diamonds = data?.rewards?.diamonds ?? 0
+        setReward({ xp, diamonds })
+        try {
+          const curXP = (session?.user as any)?.experience ?? 0
+          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+          await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
+        } catch {}
       } catch (e) {
         toast({ title: "Session save failed", description: "Could not record your Loop Runner session.", variant: "destructive" })
       }
     }
     post()
-  }, [completed, score, toast])
+  }, [completed, score, bonusXP, session, update, toast])
 
   if (!started) {
     return (
@@ -155,7 +168,7 @@ export default function LoopRunnerGame() {
               <CardTitle className="font-[family-name:var(--font-work-sans)]">Predict Loop Outputs</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex gap-2 justify-center"><Badge variant="secondary">6 Questions</Badge><Badge variant="outline">Base +60 XP + Speed Bonus</Badge></div>
+              <div className="flex gap-2 justify-center"><Badge variant="secondary">6 Questions</Badge><Badge variant="outline">Up to +10 XP + 💎</Badge></div>
               <Button onClick={start} className="w-full">Start</Button>
             </CardContent>
           </Card>
@@ -182,8 +195,11 @@ export default function LoopRunnerGame() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-1"><div className="text-3xl font-bold text-primary">{score}/{questions.length}</div><div className="text-sm text-muted-foreground">Correct Answers</div></div>
-              <Badge variant="secondary" className="text-sm px-3 py-1">+{score * 10 + bonusXP} XP Earned</Badge>
-              {bonusXP > 0 && <div className="text-sm text-muted-foreground">Speed Bonus +{bonusXP} XP</div>}
+              {reward ? (
+                <Badge variant="secondary" className="text-sm px-3 py-1">+{reward.xp} XP, +{reward.diamonds} 💎</Badge>
+              ) : (
+                <Badge variant="secondary" className="text-sm px-3 py-1">Rewards applied</Badge>
+              )}
               <div className="flex gap-3"><Button onClick={restart} variant="outline" className="flex-1 bg-transparent">Play Again</Button><Link href="/games" className="flex-1"><Button className="w-full">More Games</Button></Link></div>
             </CardContent>
           </Card>
@@ -218,7 +234,7 @@ export default function LoopRunnerGame() {
             {showResult && (
               <div className="mt-2 text-center">
                 {selected === q.answer ? (
-                  <p className="text-primary font-medium inline-flex items-center gap-2 justify-center"><CheckCircle className="w-4 h-4" /> Correct! +10 XP{lastBonus > 0 ? ` (+${lastBonus})` : ''}</p>
+                  <p className="text-primary font-medium inline-flex items-center gap-2 justify-center"><CheckCircle className="w-4 h-4" /> Correct!</p>
                 ) : (
                   <p className="text-destructive font-medium inline-flex items-center gap-2 justify-center"><XCircle className="w-4 h-4" /> {selected === "__timeout__" ? "Time's up!" : "Incorrect"}</p>
                 )}

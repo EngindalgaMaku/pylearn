@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -89,6 +90,7 @@ const achievements = [
 ]
 
 export default function ChallengesPage() {
+  const { data: session, update } = useSession()
   const [activeTab, setActiveTab] = useState("challenges")
   const [daily, setDaily] = useState<DailyData | null>(null)
   const [dailyProgress, setDailyProgress] = useState<{ attempted: boolean; score?: number; completed?: boolean } | null>(null)
@@ -131,6 +133,18 @@ export default function ChallengesPage() {
         const xp = data?.reward?.xp ?? 0
         const diamonds = data?.reward?.diamonds ?? 0
         toast({ title: "Rewards claimed", description: `+${xp} XP, +${diamonds} 💎` })
+
+        // Update session values so UI reflects new XP/diamonds immediately
+        try {
+          const curXP = (session?.user as any)?.experience ?? 0
+          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+          await update?.({
+            experience: curXP + xp,
+            currentDiamonds: curDiamonds + diamonds,
+          })
+        } catch (e) {
+          console.warn("Session update after claim failed", e)
+        }
       }
     } catch (e) {
       console.error("claim failed", e)

@@ -41,6 +41,39 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // Calculate rewards with caps
+    const baseScore = Number(score) || 0
+    const xpFromScore = Math.max(1, Math.min(10, Math.round(baseScore / 10))) // 0-100 -> 0-10, min 1, max 10
+    const xpReward = Math.min(10, xpFromScore + Math.max(0, Math.min(10, Number(bonusXP) || 0))) // bonusXP limited within 0-10 window
+    const diamondReward = baseScore >= 80 ? 3 : baseScore >= 50 ? 2 : 1
+
+    // Persist rewards and transaction
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            experience: { increment: xpReward },
+            currentDiamonds: { increment: diamondReward },
+            totalDiamonds: { increment: diamondReward },
+          },
+        })
+
+        await tx.diamondTransaction.create({
+          data: {
+            userId,
+            amount: diamondReward,
+            type: "GAME_REWARD",
+            description: `${gameKey} completed - Score: ${baseScore}% | +${xpReward} XP`,
+            relatedId: gs.id,
+            relatedType: "game_session",
+          },
+        })
+      })
+    } catch (e) {
+      console.error("Failed to apply game rewards:", e)
+    }
+
     // Best-effort: increment active challenges progress for this user
     try {
       const now = new Date()
@@ -85,7 +118,7 @@ export async function POST(req: NextRequest) {
       console.error("Failed to update challenge progress from game session:", e)
     }
 
-    return NextResponse.json({ session: gs })
+    return NextResponse.json({ session: gs, rewards: { xp: xpReward, diamonds: diamondReward } })
   } catch (e: any) {
     console.error("/api/games/session POST error:", e)
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 })

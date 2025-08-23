@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useSession } from "next-auth/react"
 import { useToast } from "@/hooks/use-toast"
 
 import { Button } from "@/components/ui/button"
@@ -94,6 +95,7 @@ function shuffleQuestionOptions(q: Question): Question {
 }
 
 export default function CodeMatchGame() {
+  const { data: session, update } = useSession()
   const [questions, setQuestions] = useState<Question[]>([])
   const [currentRound, setCurrentRound] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null)
@@ -106,6 +108,7 @@ export default function CodeMatchGame() {
   const postedRef = useRef(false)
   const { toast } = useToast()
   const TOTAL_ROUNDS = 10
+  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
 
   const currentMatch = questions[currentRound]
   const progress = questions.length > 0 ? ((currentRound + 1) / questions.length) * 100 : 0
@@ -182,27 +185,30 @@ export default function CodeMatchGame() {
 
   // Post session on completion (once)
   useEffect(() => {
-    if (!gameCompleted || postedRef.current) return
-    postedRef.current = true
-    const durationSec = runStartRef.current ? Math.max(0, Math.round((Date.now() - runStartRef.current) / 1000)) : 0
-    const payload = {
-      gameKey: "code-match",
-      score,
-      correctCount: score,
-      durationSec,
+    const run = async () => {
+      if (!gameCompleted || postedRef.current) return
+      postedRef.current = true
+      const durationSec = runStartRef.current ? Math.max(0, Math.round((Date.now() - runStartRef.current) / 1000)) : 0
+      const payload = { gameKey: "code-match", score, correctCount: score, durationSec }
+      try {
+        const res = await fetch("/api/games/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json().catch(() => ({}))
+        const xp = data?.rewards?.xp ?? 0
+        const diamonds = data?.rewards?.diamonds ?? 0
+        setReward({ xp, diamonds })
+        // Update session immediately so UI reflects changes
+        try {
+          const curXP = (session?.user as any)?.experience ?? 0
+          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+          await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
+        } catch {}
+      } catch (e) {
+        toast({ title: "Session save failed", description: "We couldn't record your game session. Your progress may not update.", variant: "destructive" })
+      }
     }
-    fetch("/api/games/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch(() => {
-      toast({
-        title: "Session save failed",
-        description: "We couldn't record your game session. Your progress may not update.",
-        variant: "destructive",
-      })
-    })
-  }, [gameCompleted, score])
+    run()
+  }, [gameCompleted, score, session, update, toast])
 
   if (!gameStarted) {
     return (
@@ -240,7 +246,7 @@ export default function CodeMatchGame() {
 
               <div className="flex gap-2 justify-center">
                 <Badge variant="secondary">10 Questions</Badge>
-                <Badge variant="outline">+100 XP</Badge>
+                <Badge variant="outline">Up to +10 XP + 💎</Badge>
               </div>
 
               <Button onClick={startGame} className="w-full">
@@ -287,9 +293,13 @@ export default function CodeMatchGame() {
                 <div className="text-sm text-muted-foreground">Score</div>
               </div>
 
-              <Badge variant={percentage >= 80 ? "default" : "secondary"} className="text-sm px-3 py-1">
-                +{score * 10} XP Earned
-              </Badge>
+              {reward ? (
+                <Badge variant={percentage >= 80 ? "default" : "secondary"} className="text-sm px-3 py-1">
+                  +{reward.xp} XP, +{reward.diamonds} 💎
+                </Badge>
+              ) : (
+                <Badge variant={percentage >= 80 ? "default" : "secondary"} className="text-sm px-3 py-1">Rewards applied</Badge>
+              )}
 
               <div className="flex gap-3">
                 <Button onClick={restartGame} variant="outline" className="flex-1 bg-transparent">
@@ -372,7 +382,7 @@ export default function CodeMatchGame() {
                 {selectedAnswer === -1 ? (
                   <p className="text-destructive font-medium">Time's up!</p>
                 ) : selectedAnswer === currentMatch.correct ? (
-                  <p className="text-primary font-medium">Correct! +10 XP</p>
+                  <p className="text-primary font-medium">Correct!</p>
                 ) : (
                   <p className="text-destructive font-medium">Incorrect. Try again next time!</p>
                 )}

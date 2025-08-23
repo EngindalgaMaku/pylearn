@@ -14,6 +14,7 @@ type Game = {
   icon: string
   timeEstimate: string
   xpReward: number
+  diamondReward: number
   keywords?: string[]
 }
 
@@ -25,7 +26,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "🧩",
     timeEstimate: "3 min",
-    xpReward: 50,
+    xpReward: 10,
+    diamondReward: 2,
     keywords: ["python", "match code", "output", "beginners"],
   },
   {
@@ -35,7 +37,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "🔧",
     timeEstimate: "5 min",
-    xpReward: 75,
+    xpReward: 20,
+    diamondReward: 3,
     keywords: ["python syntax", "puzzle", "blocks", "order"],
   },
   {
@@ -45,7 +48,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "🕵️",
     timeEstimate: "4 min",
-    xpReward: 60,
+    xpReward: 10,
+    diamondReward: 2,
     keywords: ["variables", "naming rules", "identifiers"],
   },
   {
@@ -55,7 +59,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "📦",
     timeEstimate: "3 min",
-    xpReward: 60,
+    xpReward: 10,
+    diamondReward: 2,
     keywords: ["types", "int", "str", "list", "dict"],
   },
   {
@@ -65,7 +70,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "🔁",
     timeEstimate: "4 min",
-    xpReward: 60,
+    xpReward: 10,
+    diamondReward: 2,
     keywords: ["for", "while", "range", "loops"],
   },
   {
@@ -75,7 +81,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "📞",
     timeEstimate: "4 min",
-    xpReward: 60,
+    xpReward: 10,
+    diamondReward: 2,
     keywords: ["functions", "arguments", "return", "defaults"],
   },
   {
@@ -85,7 +92,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "🧠",
     timeEstimate: "4 min",
-    xpReward: 60,
+    xpReward: 10,
+    diamondReward: 2,
     keywords: ["memory", "matching", "terms", "definitions"],
   },
 ]
@@ -243,7 +251,7 @@ export default async function GamesPage() {
                 <CardContent>
                   <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
                     <span>{game.timeEstimate}</span>
-                    <span>+{game.xpReward} XP</span>
+                    <span>Up to +{game.xpReward} XP, +{game.diamondReward} 💎</span>
                   </div>
                   <Link href={`/games/${game.id}`}>
                     <Button className="w-full">Play</Button>

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Calendar, Trophy, Target, Zap } from "lucide-react"
+import { ArrowLeft, Calendar, Trophy, Target, Zap, Gem } from "lucide-react"
 import Link from "next/link"
 import { MobilePageHeader } from "@/components/mobile-page-header"
 import { getServerSession } from "next-auth"
@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { generateImageToken } from "@/lib/imageToken"
 import { getXPProgress } from "@/lib/xp"
+import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm"
+import { ChangeUsernameForm } from "@/components/settings/ChangeUsernameForm"
 
 // Always render dynamically so latest stats show
 export const dynamic = "force-dynamic"
@@ -74,9 +76,19 @@ export default async function ProfilePage({
     : resolvedSearchParams?.page
   const page = Math.max(1, Number(pageParam ?? 1) || 1)
   const skip = (page - 1) * PAGE_SIZE
+  const tabParam = Array.isArray((resolvedSearchParams as any)?.tab)
+    ? (resolvedSearchParams as any).tab[0]
+    : (resolvedSearchParams as any)?.tab
+  const tab = tabParam === "owned" || tabParam === "settings" ? tabParam : "overview"
+  const OWNED_PAGE_SIZE = 20
+  const ownedPageParam = Array.isArray((resolvedSearchParams as any)?.ownedPage)
+    ? (resolvedSearchParams as any).ownedPage[0]
+    : (resolvedSearchParams as any)?.ownedPage
+  const ownedPage = Math.max(1, Number(ownedPageParam ?? 1) || 1)
+  const ownedSkip = (ownedPage - 1) * OWNED_PAGE_SIZE
 
   // Fetch base user and attempts/statistics
-  const [user, attemptsRecent, activities, totals, completedCats, ownedCards, totalCompleted] = await Promise.all([
+  const [user, attemptsRecent, activities, totals, completedCats, ownedCards, totalOwnedCount, totalCompleted, challengeRecent, gameRecent] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -85,6 +97,8 @@ export default async function ProfilePage({
         loginStreak: true,
         maxLoginStreak: true,
         quizzesCompleted: true,
+        currentDiamonds: true,
+        username: true,
       },
     }),
     prisma.activityAttempt.findMany({
@@ -130,9 +144,26 @@ export default async function ProfilePage({
         },
       },
       orderBy: { purchaseDate: "desc" },
-      take: 60,
+      skip: ownedSkip,
+      take: OWNED_PAGE_SIZE,
     }),
+    prisma.userCard.count({ where: { userId } }),
     prisma.activityAttempt.count({ where: { userId, completed: true } }),
+    prisma.userChallengeProgress.findMany({
+      where: { userId, OR: [{ isCompleted: true }, { rewardsClaimed: true }] },
+      include: { challenge: { select: { title: true, experienceReward: true, challengeType: true } } },
+      orderBy: [
+        { claimedAt: "desc" },
+        { completedAt: "desc" },
+        { lastProgressAt: "desc" },
+      ],
+      take: 10,
+    }),
+    prisma.gameSession.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
   ])
 
   const totalXP = user?.experience ?? 0
@@ -167,15 +198,58 @@ export default async function ProfilePage({
     .slice(0, 6)
 
   const totalPages = Math.max(1, Math.ceil((totalCompleted || 0) / PAGE_SIZE))
+  const totalOwnedPages = Math.max(1, Math.ceil((totalOwnedCount || 0) / OWNED_PAGE_SIZE))
 
   // Recent activity list (from attempts)
   const recentActivity = attemptsRecent.slice(0, 10).map((att) => ({
-    type: "quiz" as const,
+    type: "lesson" as const,
     title: att.activity?.title || "Activity",
     score: att.score || 0,
     xp: att.activity?.experienceReward || 0,
     date: att.completedAt ? relativeDay(att.completedAt) : "Today",
   }))
+
+  // Include weekly challenge completions/claims
+  const challengeActivity = (challengeRecent || []).map((p) => {
+    const when = (p.claimedAt || p.completedAt || p.lastProgressAt) as Date
+    return {
+      type: "challenge" as const,
+      title: p.challenge?.title || "Weekly Challenge",
+      score: 100,
+      xp: p.challenge?.experienceReward || 0,
+      date: relativeDay(when),
+      kind: (p.challenge as any)?.challengeType || "weekly",
+      _sortDate: when,
+    }
+  })
+
+  // Include game sessions
+  const gameActivity = (gameRecent || []).map((g) => {
+    const baseScore = g.score || 0
+    const xpFromScore = Math.max(1, Math.min(10, Math.round(baseScore / 10)))
+    const bonusXP = Math.max(0, Math.min(10, g.bonusXP || 0))
+    const xp = Math.min(10, xpFromScore + bonusXP)
+    const diamonds = baseScore >= 80 ? 3 : baseScore >= 50 ? 2 : 1
+    const when = (g.completedAt || g.createdAt) as Date
+    return {
+      type: "game" as const,
+      title: `Game: ${g.gameKey}`,
+      score: baseScore,
+      xp,
+      diamonds,
+      date: relativeDay(when),
+      _sortDate: when,
+    }
+  })
+
+  // Merge and show latest 10 by date
+  const allRecentActivity = [...gameActivity, ...challengeActivity, ...recentActivity]
+    .sort((a: any, b: any) => {
+      const ad = (a._sortDate as Date) ?? new Date()
+      const bd = (b._sortDate as Date) ?? new Date()
+      return bd.getTime() - ad.getTime()
+    })
+    .slice(0, 10)
 
   // Simple achievements derived from data
   const achievements = [
@@ -258,7 +332,7 @@ export default async function ProfilePage({
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6">
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs defaultValue={tab} className="w-full">
           <div className="flex items-center justify-between mb-4">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -351,23 +425,34 @@ export default async function ProfilePage({
                     <CardDescription>Your latest completed activities</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {recentActivity.length === 0 ? (
+                    {allRecentActivity.length === 0 ? (
                       <div className="text-sm text-muted-foreground">No recent activity</div>
                     ) : (
-                      recentActivity.map((activity, idx) => (
+                      allRecentActivity.map((activity: any, idx: number) => (
                         <div key={idx} className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                              <span className="text-sm">{activity.type === "quiz" ? "📝" : "🎮"}</span>
+                              <span className="text-sm">
+                                {activity.type === "game" ? "🎮" : activity.type === "challenge" ? "🏆" : "📝"}
+                              </span>
                             </div>
                             <div>
-                              <p className="text-sm font-medium">{activity.title}</p>
+                              <p className="text-sm font-medium flex items-center gap-2">
+                                {activity.title}
+                                {activity.type === "game" && <Badge variant="secondary">Game</Badge>}
+                                {activity.type === "lesson" && <Badge variant="outline">Lesson</Badge>}
+                                {activity.type === "challenge" && (
+                                  <Badge variant="default">{String(activity.kind || "challenge").toString().replace(/\b\w/g, (c: string) => c.toUpperCase())} Challenge</Badge>
+                                )}
+                              </p>
                               <p className="text-xs text-muted-foreground">{activity.date}</p>
                             </div>
                           </div>
                           <div className="text-right">
                             <div className="text-sm font-medium">{activity.score}%</div>
-                            <div className="text-xs text-secondary">+{activity.xp} XP</div>
+                            <div className="text-xs text-secondary">
+                              +{activity.xp} XP{typeof activity.diamonds === "number" ? `, +${activity.diamonds} 💎` : ""}
+                            </div>
                           </div>
                         </div>
                       ))
@@ -439,6 +524,37 @@ export default async function ProfilePage({
 
           <TabsContent value="owned">
             <div className="space-y-4">
+              {/* Diamonds Balance & Shop CTA */}
+              <Card className="bg-gradient-to-r from-amber-100/60 to-yellow-100/40 dark:from-yellow-900/20 dark:to-amber-900/10 border-amber-300/40">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                        <Gem className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base font-[family-name:var(--font-work-sans)]">Your Diamonds</CardTitle>
+                        <CardDescription>Use diamonds to unlock awesome cards and bonuses in the Shop.</CardDescription>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{user?.currentDiamonds ?? 0}</div>
+                      <div className="text-xs text-muted-foreground">current balance</div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between gap-3">
+                  <div className="text-xs sm:text-sm text-muted-foreground">
+                    Visit the Shop to buy new card packs, collect rarities, and power up your collection.
+                  </div>
+                  <Link href="/shop">
+                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
+                      Go to Shop
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base font-[family-name:var(--font-work-sans)]">Your Cards</CardTitle>
@@ -484,28 +600,41 @@ export default async function ProfilePage({
                       ))}
                     </div>
                   )}
+                  <div className="flex items-center justify-between pt-4">
+                    <Link href={`/profile?tab=owned&ownedPage=${Math.max(1, ownedPage - 1)}`}>
+                      <Button variant="outline" size="sm" disabled={ownedPage <= 1}>Prev</Button>
+                    </Link>
+                    <div className="text-xs text-muted-foreground">Page {ownedPage} / {totalOwnedPages}</div>
+                    <Link href={`/profile?tab=owned&ownedPage=${Math.min(totalOwnedPages, ownedPage + 1)}`}>
+                      <Button variant="outline" size="sm" disabled={ownedPage >= totalOwnedPages}>Next</Button>
+                    </Link>
+                  </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="settings">
-            <div className="space-y-4">
+            <div className="space-y-6 max-w-lg">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base font-[family-name:var(--font-work-sans)]">Account Settings</CardTitle>
-                  <CardDescription>Manage your profile and security preferences.</CardDescription>
+                  <CardTitle className="text-base font-[family-name:var(--font-work-sans)]">Change Username</CardTitle>
+                  <CardDescription>
+                    Current: <span className="font-medium">{user?.username}</span>. You can change your username once per week.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium">Change Password</div>
-                      <div className="text-xs text-muted-foreground">Update your password to keep your account secure.</div>
-                    </div>
-                    <Link href="/settings">
-                      <Button size="sm" variant="secondary">Open Settings</Button>
-                    </Link>
-                  </div>
+                <CardContent>
+                  <ChangeUsernameForm initialUsername={user?.username as string} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-[family-name:var(--font-work-sans)]">Change Password</CardTitle>
+                  <CardDescription>Update your password to keep your account secure.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChangePasswordForm />
                 </CardContent>
               </Card>
             </div>

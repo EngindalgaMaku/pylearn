@@ -635,38 +635,124 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
               </h2>
 
               <div className="grid grid-cols-1 gap-4">
-                {/* Game: Code Match */}
-                <Card className="overflow-hidden hover:shadow-md transition-shadow">
-                  <CardContent className="p-0">
-                    <div className="p-4 md:p-6 flex items-center gap-4">
-                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-primary/10">
-                        <span className="text-2xl md:text-3xl">🧩</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium md:text-lg lg:text-xl truncate">Code Match</h3>
-                        <p className="text-sm md:text-base lg:text-lg text-muted-foreground">
-                          Match Python code to its output. 50 questions, sudden‑death, 30s per round.
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary">50 Q</Badge>
-                          <Badge variant="outline">Sudden‑Death</Badge>
-                          <Badge variant="outline">30s/round</Badge>
+                {/* Random Featured Game */}
+                {(() => {
+                  const games = [
+                    {
+                      key: "code-match",
+                      href: "/games/code-match",
+                      title: "Code Match",
+                      description: "Match Python code to its output. 50 questions, sudden‑death, 30s per round.",
+                      icon: "🧩",
+                      badges: [
+                        { label: "50 Q", variant: "secondary" as const },
+                        { label: "Sudden‑Death", variant: "outline" as const },
+                        { label: "30s/round", variant: "outline" as const },
+                      ],
+                    },
+                    {
+                      key: "data-types",
+                      href: "/games/data-types",
+                      title: "Data Types",
+                      description: "Identify correct Python data types under time pressure.",
+                      icon: "🔢",
+                      badges: [
+                        { label: "Timed", variant: "secondary" as const },
+                        { label: "Beginner", variant: "outline" as const },
+                      ],
+                    },
+                    {
+                      key: "function-calls",
+                      href: "/games/function-calls",
+                      title: "Function Calls",
+                      description: "Predict outputs of Python function calls — 5 rounds.",
+                      icon: "🧮",
+                      badges: [
+                        { label: "+XP", variant: "secondary" as const },
+                        { label: "5 rounds", variant: "outline" as const },
+                      ],
+                    },
+                    {
+                      key: "loop-runner",
+                      href: "/games/loop-runner",
+                      title: "Loop Runner",
+                      description: "Trace loops and find the final values quickly.",
+                      icon: "🔁",
+                      badges: [
+                        { label: "Loops", variant: "secondary" as const },
+                        { label: "Fast", variant: "outline" as const },
+                      ],
+                    },
+                    {
+                      key: "memory-match",
+                      href: "/games/memory-match",
+                      title: "Memory Match",
+                      description: "Flip and match Python terms to strengthen recall.",
+                      icon: "🧠",
+                      badges: [
+                        { label: "Recall", variant: "secondary" as const },
+                        { label: "Casual", variant: "outline" as const },
+                      ],
+                    },
+                    {
+                      key: "syntax-puzzle",
+                      href: "/games/syntax-puzzle",
+                      title: "Syntax Puzzle",
+                      description: "Fix broken snippets to valid Python syntax.",
+                      icon: "🧩",
+                      badges: [
+                        { label: "Fix Code", variant: "secondary" as const },
+                        { label: "Syntax", variant: "outline" as const },
+                      ],
+                    },
+                    {
+                      key: "variable-naming",
+                      href: "/games/variable-naming",
+                      title: "Variable Naming",
+                      description: "Choose the best variable names for clarity.",
+                      icon: "🏷️",
+                      badges: [
+                        { label: "Best Practices", variant: "secondary" as const },
+                        { label: "Beginner", variant: "outline" as const },
+                      ],
+                    },
+                  ]
+
+                  const pick = games[Math.floor(Math.random() * games.length)]
+                  return (
+                    <Card className="overflow-hidden hover:shadow-md transition-shadow">
+                      <CardContent className="p-0">
+                        <div className="p-4 md:p-6 flex items-center gap-4">
+                          <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-primary/10">
+                            <span className="text-2xl md:text-3xl">{pick.icon}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium md:text-lg lg:text-xl truncate">{pick.title}</h3>
+                            <p className="text-sm md:text-base lg:text-lg text-muted-foreground">
+                              {pick.description}
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              {pick.badges.map((b, i) => (
+                                <Badge key={i} variant={b.variant}>{b.label}</Badge>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-end border-t border-border/60 bg-card/40 px-4 md:px-6 py-3">
-                      <Link href="/games/code-match" className="w-full sm:w-auto">
-                        <Button size="sm" className="w-full sm:w-auto md:text-base">Play</Button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
+                        <div className="flex items-center justify-end border-t border-border/60 bg-card/40 px-4 md:px-6 py-3">
+                          <Link href={pick.href} className="w-full sm:w-auto">
+                            <Button size="sm" className="w-full sm:w-auto md:text-base">Play</Button>
+                          </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })()}
 
                 {/* More Games (CTA) */}
                 <Card className="overflow-hidden hover:shadow-md transition-shadow">
                   <CardContent className="p-0">
                     <div className="p-4 md:p-6 flex items-center gap-4">
-                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-fuchsia-500/20">
+                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-secondary/10">
                         <span className="text-2xl md:text-3xl">🎮</span>
                       </div>
                       <div className="flex-1 min-w-0">

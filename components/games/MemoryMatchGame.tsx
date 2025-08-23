@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,6 +47,7 @@ function buildCardsFromPairs(pairs: MatchingPair[], limit?: number): CardFace[] 
 }
 
 export default function MemoryMatchGame({ slug = "python-basics-matching", title, timeLimitSec, pairCount = 8 }: MemoryMatchProps) {
+  const { data: session, update } = useSession()
   const cfg: MatchingConfig | null = useMemo(() => getMatchingConfig(slug), [slug])
   const effectiveTitle = title || cfg?.title || "Memory Match"
   const limit = typeof timeLimitSec === "number" && !Number.isNaN(timeLimitSec) ? timeLimitSec : cfg?.timeLimitSec ?? 180
@@ -58,6 +60,7 @@ export default function MemoryMatchGame({ slug = "python-basics-matching", title
   const [phase, setPhase] = useState<"start" | "playing" | "completed">("start")
   const [startAt, setStartAt] = useState<Date | null>(null)
   const [endAt, setEndAt] = useState<Date | null>(null)
+  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
 
   // Rebuild when config changes
   useEffect(() => {
@@ -132,11 +135,21 @@ export default function MemoryMatchGame({ slug = "python-basics-matching", title
         correctCount: matchedPairs,
         durationSec,
       }
-      await fetch("/api/games/session", {
+      const res = await fetch("/api/games/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json().catch(() => ({}))
+      const xp = data?.rewards?.xp ?? 0
+      const diamonds = data?.rewards?.diamonds ?? 0
+      setReward({ xp, diamonds })
+      try {
+        const curXP = (session?.user as any)?.experience ?? 0
+        const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+        await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
+      } catch {}
     } catch {}
   }
 
@@ -198,7 +211,7 @@ export default function MemoryMatchGame({ slug = "python-basics-matching", title
               </div>
               <div className="text-center p-4 bg-muted/50 rounded-lg">
                 <Trophy className="w-6 h-6 mx-auto mb-2 text-primary" />
-                <div className="font-semibold">Earn XP</div>
+                <div className="font-semibold">Up to +10 XP + 💎</div>
                 <div className="text-sm text-muted-foreground">Sharpen your memory</div>
               </div>
             </div>
@@ -244,6 +257,10 @@ export default function MemoryMatchGame({ slug = "python-basics-matching", title
           <Card><CardContent className="p-6 text-center"><Badge variant="outline">Moves</Badge><div className="text-2xl font-bold">{moves}</div><div className="text-sm text-muted-foreground">Total Moves</div></CardContent></Card>
           <Card><CardContent className="p-6 text-center"><Badge variant="outline">Pairs</Badge><div className="text-2xl font-bold">{totalPairs}</div><div className="text-sm text-muted-foreground">Total Pairs</div></CardContent></Card>
         </div>
+
+        {reward ? (
+          <div className="flex justify-center"><Badge variant="secondary" className="text-sm px-3 py-1">+{reward.xp} XP, +{reward.diamonds} 💎</Badge></div>
+        ) : null}
 
         <div className="flex gap-3 justify-center pb-2">
           <Button variant="outline" onClick={resetRun}><RotateCcw className="w-4 h-4 mr-2"/>Try Again</Button>

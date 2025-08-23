@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState, useEffect, useRef } from "react"
+import { useSession } from "next-auth/react"
 import { useToast } from "@/hooks/use-toast"
 
 import Link from "next/link"
@@ -63,6 +64,8 @@ export default function VariableNamingGame() {
   const runStartRef = useRef<number | null>(null)
   const postedRef = useRef(false)
   const { toast } = useToast()
+  const { data: session, update } = useSession()
+  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
 
   useEffect(() => {
     if (!started || gameOver) return
@@ -127,7 +130,7 @@ export default function VariableNamingGame() {
       const startedAt = runStartRef.current ?? Date.now()
       const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
       try {
-        await fetch("/api/games/session", {
+        const res = await fetch("/api/games/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -137,6 +140,16 @@ export default function VariableNamingGame() {
             durationSec,
           }),
         })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json().catch(() => ({}))
+        const xp = data?.rewards?.xp ?? 0
+        const diamonds = data?.rewards?.diamonds ?? 0
+        setReward({ xp, diamonds })
+        try {
+          const curXP = (session?.user as any)?.experience ?? 0
+          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+          await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
+        } catch {}
       } catch (e) {
         console.error("Failed to post game session (variable-naming)", e)
         toast({
@@ -147,7 +160,7 @@ export default function VariableNamingGame() {
       }
     }
     postSession()
-  }, [gameOver, started, score])
+  }, [gameOver, started, score, session, update, toast])
 
   if (!started) {
     return (
@@ -184,7 +197,7 @@ export default function VariableNamingGame() {
 
               <div className="flex gap-2 justify-center">
                 <Badge variant="secondary">12 Rounds</Badge>
-                <Badge variant="outline">+60 XP</Badge>
+                <Badge variant="outline">Up to +10 XP + 💎</Badge>
               </div>
 
               <Button onClick={onStart} className="w-full">
@@ -308,7 +321,7 @@ export default function VariableNamingGame() {
               <div className="text-center space-y-3">
                 {answered ? (
                   <p className="text-primary font-medium inline-flex items-center gap-2 justify-center">
-                    <CheckCircle className="w-4 h-4" /> Correct! +5 XP
+                    <CheckCircle className="w-4 h-4" /> Correct!
                   </p>
                 ) : (
                   <p className="text-destructive font-medium inline-flex items-center gap-2 justify-center">

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useSession } from "next-auth/react"
 import { useToast } from "@/hooks/use-toast"
 
 import { Button } from "@/components/ui/button"
@@ -34,6 +35,7 @@ const puzzles = [
 ]
 
 export default function SyntaxPuzzleGame() {
+  const { data: session, update } = useSession()
   const [currentPuzzle, setCurrentPuzzle] = useState(0)
   const [userOrder, setUserOrder] = useState<number[]>([])
   const [gameStarted, setGameStarted] = useState(false)
@@ -43,6 +45,7 @@ export default function SyntaxPuzzleGame() {
   const runStartRef = useRef<number | null>(null)
   const postedRef = useRef(false)
   const { toast } = useToast()
+  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
 
   const puzzle = puzzles[currentPuzzle]
 
@@ -104,7 +107,7 @@ export default function SyntaxPuzzleGame() {
       const startedAt = runStartRef.current ?? Date.now()
       const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
       try {
-        await fetch("/api/games/session", {
+        const res = await fetch("/api/games/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -114,6 +117,16 @@ export default function SyntaxPuzzleGame() {
             durationSec,
           }),
         })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json().catch(() => ({}))
+        const xp = data?.rewards?.xp ?? 0
+        const diamonds = data?.rewards?.diamonds ?? 0
+        setReward({ xp, diamonds })
+        try {
+          const curXP = (session?.user as any)?.experience ?? 0
+          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+          await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
+        } catch {}
       } catch (e) {
         console.error("Failed to post game session (syntax-puzzle)", e)
         toast({
@@ -124,7 +137,7 @@ export default function SyntaxPuzzleGame() {
       }
     }
     postSession()
-  }, [gameCompleted, score])
+  }, [gameCompleted, score, session, update, toast])
 
   if (!gameStarted) {
     return (
@@ -160,7 +173,7 @@ export default function SyntaxPuzzleGame() {
 
               <div className="flex gap-2 justify-center">
                 <Badge variant="secondary">{puzzles.length} Puzzles</Badge>
-                <Badge variant="outline">+75 XP</Badge>
+                <Badge variant="outline">Up to +10 XP + 💎</Badge>
               </div>
 
               <Button onClick={startGame} className="w-full">
@@ -206,9 +219,11 @@ export default function SyntaxPuzzleGame() {
                 <div className="text-sm text-muted-foreground">Puzzles Solved</div>
               </div>
 
-              <Badge variant="default" className="text-sm px-3 py-1">
-                +{score * 25} XP Earned
-              </Badge>
+              {reward ? (
+                <Badge variant="default" className="text-sm px-3 py-1">+{reward.xp} XP, +{reward.diamonds} 💎</Badge>
+              ) : (
+                <Badge variant="default" className="text-sm px-3 py-1">Rewards applied</Badge>
+              )}
 
               <div className="flex gap-3">
                 <Button onClick={restartGame} variant="outline" className="flex-1 bg-transparent">
