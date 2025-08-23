@@ -113,12 +113,17 @@ async function analyzeCard(card: any, forceReAnalysis = false) {
     let fileSize = 0
     try {
       let fullImagePath: string
-      if (path.isAbsolute(imagePath)) {
+      const isWebAbsolute = typeof imagePath === "string" && /^[\\/]/.test(imagePath)
+      if (!isWebAbsolute && path.isAbsolute(imagePath)) {
+        // True filesystem-absolute (e.g., C:\path\to\file.jpg)
         fullImagePath = imagePath
+      } else if (isWebAbsolute) {
+        // Web-rooted path like "/uploads/..." -> resolve under public/
+        const trimmed = imagePath.replace(/^[\\/]+/, "")
+        fullImagePath = path.join(process.cwd(), "public", trimmed)
       } else {
-        fullImagePath = imagePath?.startsWith("/uploads/")
-          ? path.join(process.cwd(), "public", imagePath)
-          : path.join(process.cwd(), "public", "uploads", imagePath)
+        // Relative path like "categories/..." -> under public/uploads/
+        fullImagePath = path.join(process.cwd(), "public", "uploads", imagePath)
       }
       const stats = fs.statSync(fullImagePath)
       fileSize = stats.size

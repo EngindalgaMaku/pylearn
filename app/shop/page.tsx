@@ -479,14 +479,10 @@ export default function ShopPage() {
                   <div
                     className="aspect-[3/4] relative overflow-hidden cursor-zoom-in"
                     onClick={() => {
-                      // Open lightbox only if we have a real image (skip placeholder)
-                      if (!card.image || card.image.includes("placeholder.svg")) return
-                      setLightbox({
-                        open: true,
-                        // Use the exact same photo shown on the card
-                        src: card.image,
-                        alt: card.name,
-                      })
+                      // Prefer secure preview/full for lightbox
+                      const preview = (card as any).securePreviewUrl || (card as any).secureFullImageUrl || card.image
+                      if (!preview || preview.includes("placeholder.svg")) return
+                      setLightbox({ open: true, src: preview, alt: card.name })
                     }}
                     role="button"
                     aria-label={`Expand image for ${card.name}`}

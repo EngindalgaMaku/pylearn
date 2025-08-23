@@ -76,12 +76,20 @@ export default function BulkUploadClient({
           });
           if (!res.ok) throw new Error("Analyze request failed");
           setStatus("Analysis completed");
+          // Clear selection after successful upload + analysis
+          clearAll();
+          if (inputRef.current) inputRef.current.value = "";
         } catch (err: any) {
           setStatus("Analyze failed");
           setErrors((prev) => [...prev, { fileName: "(bulk)", message: err?.message || "Analyze failed" }]);
         }
       } else {
         setStatus("Upload completed");
+        if ((result.createdIds?.length || 0) > 0) {
+          // Clear selection after successful upload (no analysis path)
+          clearAll();
+          if (inputRef.current) inputRef.current.value = "";
+        }
       }
     } catch (err: any) {
       setStatus("Upload failed");

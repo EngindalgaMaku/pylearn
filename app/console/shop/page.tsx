@@ -8,7 +8,9 @@ import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import ImagePreview from "@/components/ImagePreview";
 import BulkUploadClient from "@/components/BulkUploadClient";
 import ReanalyzeButtons from "@/components/ReanalyzeButtons";
+import ReanalyzeAllButton from "@/components/ReanalyzeAllButton";
 import { Card as UICard, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Prisma } from "@prisma/client";
 import fs from "fs/promises";
 import path from "path";
@@ -710,7 +712,7 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
         </div>
         <div className="space-y-3 p-3">
           <div className="text-sm text-muted-foreground">Apply an action to all filtered results below.</div>
-          <form action={bulkFilteredAction} className="grid sm:grid-cols-2 lg:grid-cols-6 gap-2">
+          <form action={bulkFilteredAction} className="grid grid-cols-12 gap-2 items-end">
               <input type="hidden" name="q" value={q} />
               <input type="hidden" name="category" value={category} />
               <input type="hidden" name="rarity" value={rarity} />
@@ -719,37 +721,51 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
               <input type="hidden" name="size" value={String(size)} />
               <input type="hidden" name="page" value={String(page)} />
 
-              <div className="flex gap-2">
-                <select name="field" className="border rounded-md px-3 py-2">
-                  <option value="isPurchasable">Set Purchasable</option>
-                  <option value="isPublic">Set Public</option>
-                </select>
-                <select name="value" className="border rounded-md px-3 py-2">
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
+              {/* Field + Value */}
+              <div className="col-span-12 md:col-span-6 lg:col-span-4">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Change flags</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select name="field" className="h-9 border rounded-md px-3 text-sm">
+                    <option value="isPurchasable">Set Purchasable</option>
+                    <option value="isPublic">Set Public</option>
+                  </select>
+                  <select name="value" className="h-9 border rounded-md px-3 text-sm">
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Rarity override (optional) */}
+              <div className="col-span-12 sm:col-span-6 md:col-span-3 lg:col-span-2">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Set rarity (optional)</div>
+                <select name="setRarity" defaultValue="" className="h-9 w-full border rounded-md px-3 text-sm">
+                  <option value="">(no change) Set rarity…</option>
+                  {rarities.map((r) => (
+                    <option key={r.name} value={r.name}>
+                      {r.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <select name="setRarity" defaultValue="" className="border rounded-md px-3 py-2">
-                <option value="">(no change) Set rarity…</option>
-                {rarities.map((r) => (
-                  <option key={r.name} value={r.name}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-
-              {/* Category change disabled */}
-
-              <div className="sm:col-span-2 lg:col-span-6 flex flex-wrap items-center gap-2">
-                <label className="text-xs text-muted-foreground" htmlFor="clean_limit">Batch size</label>
-                <select id="clean_limit" name="clean_limit" defaultValue="500" className="border rounded-md px-2 py-2 text-xs">
+              {/* Batch size */}
+              <div className="col-span-6 md:col-span-3 lg:col-span-2">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Batch size</div>
+                <select id="clean_limit" name="clean_limit" defaultValue="500" className="h-9 w-full border rounded-md px-2 text-sm">
                   {[100,200,500,1000,2000].map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
-                <button type="submit" name="op" value="apply" className="px-3 py-2 rounded-md border">Apply to filtered</button>
-                <button type="submit" name="op" value="clean_titles" className="px-3 py-2 rounded-md border bg-amber-500/10 hover:bg-amber-500/20">Clean titles</button>
-                <button type="submit" name="op" value="title_from_character" className="px-3 py-2 rounded-md border bg-indigo-500/10 hover:bg-indigo-500/20">Title = Character</button>
-                <button type="submit" name="op" value="backfill_uploaddate" className="px-3 py-2 rounded-md border bg-emerald-500/10 hover:bg-emerald-500/20">Backfill uploadDate</button>
+              </div>
+
+              {/* Actions */}
+              <div className="col-span-12 md:col-span-6 lg:col-span-4">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1 md:text-right">Content tools</div>
+                <div className="flex flex-wrap gap-2 justify-start md:justify-end">
+                  <Button type="submit" name="op" value="apply" className="h-9">Apply to filtered</Button>
+                  <Button type="submit" name="op" value="clean_titles" variant="outline" className="h-9 bg-amber-500/10 hover:bg-amber-500/20">Clean titles</Button>
+                  <Button type="submit" name="op" value="title_from_character" variant="outline" className="h-9 bg-indigo-500/10 hover:bg-indigo-500/20">Title = Character</Button>
+                  <Button type="submit" name="op" value="backfill_uploaddate" variant="outline" className="h-9 bg-emerald-500/10 hover:bg-emerald-500/20">Backfill uploadDate</Button>
+                </div>
               </div>
             </form>
         </div>
@@ -759,39 +775,51 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
       <form
         id="bulkForm"
         action={bulkSelectedAction}
-        className="z-0 rounded-md p-2 mt-3 mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground bg-background/60 border"
+        className="z-0 rounded-md p-3 mt-3 mb-2 bg-background/60 border"
       >
-        <select name="bulk_action" className="border rounded px-2 h-8">
-          <option value="set_rarity">Set Rarity</option>
-          <option value="set_public">Set Public</option>
-          <option value="set_purch">Set Purchasable</option>
-          <option value="title_from_character">Title = Character</option>
-          <option value="delete">Delete</option>
-        </select>
-        {/* Preserve current filters for redirect */}
-        <input type="hidden" name="q" value={q} />
-        <input type="hidden" name="category" value={category} />
-        <input type="hidden" name="purch" value={purch} />
-        <input type="hidden" name="pub" value={pub} />
-        <input type="hidden" name="size" value={String(size)} />
-        <input type="hidden" name="page" value={String(page)} />
-        <select name="bulk_rarity" className="border rounded px-2 h-8">
-          <option value="">(none)</option>
-          {rarities.map((r) => (
-            <option key={r.name} value={r.name}>{r.name}</option>
-          ))}
-        </select>
-        <select name="bulk_public" className="border rounded px-2 h-8">
-          <option value="">Public?</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
-        <select name="bulk_purch" className="border rounded px-2 h-8">
-          <option value="">Purchasable?</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
-        <button className="px-3 h-8 rounded border text-xs text-foreground/80 hover:bg-muted" type="submit">Apply</button>
+        <div className="grid grid-cols-12 gap-2 items-end text-sm text-foreground/90">
+          <div className="col-span-12 sm:col-span-4 md:col-span-3">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Action</div>
+            <select name="bulk_action" className="h-9 w-full border rounded px-3">
+              <option value="set_rarity">Set Rarity</option>
+              <option value="set_public">Set Public</option>
+              <option value="set_purch">Set Purchasable</option>
+              <option value="title_from_character">Title = Character</option>
+              <option value="delete">Delete</option>
+            </select>
+          </div>
+          {/* Preserve current filters for redirect */}
+          <input type="hidden" name="q" value={q} />
+          <input type="hidden" name="category" value={category} />
+          <input type="hidden" name="purch" value={purch} />
+          <input type="hidden" name="pub" value={pub} />
+          <input type="hidden" name="size" value={String(size)} />
+          <input type="hidden" name="page" value={String(page)} />
+          <div className="col-span-12 sm:col-span-8 md:col-span-7">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Change attributes</div>
+            <div className="grid grid-cols-12 gap-2">
+              <select name="bulk_rarity" className="col-span-12 sm:col-span-6 md:col-span-6 h-9 border rounded px-3">
+                <option value="">(none)</option>
+                {rarities.map((r) => (
+                  <option key={r.name} value={r.name}>{r.name}</option>
+                ))}
+              </select>
+              <select name="bulk_public" className="col-span-6 sm:col-span-3 md:col-span-3 h-9 border rounded px-3">
+                <option value="">Public?</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+              <select name="bulk_purch" className="col-span-6 sm:col-span-3 md:col-span-3 h-9 border rounded px-3">
+                <option value="">Purchasable?</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+          </div>
+          <div className="col-span-12 sm:col-span-12 md:col-span-2 flex justify-end">
+            <Button className="h-9" type="submit">Apply</Button>
+          </div>
+        </div>
       </form>
 
       <UICard>
@@ -801,9 +829,12 @@ export default async function ShopPage({ searchParams }: { searchParams?: any })
         </CardHeader>
         <CardContent className="space-y-3">
           {/* Reanalyze controls for failed/late analysis */}
-          <div className="z-0 rounded-md p-2 mt-1 flex items-center justify-between text-xs bg-background/60 border">
-            <div className="text-muted-foreground">Run AI analysis again if previous attempt failed.</div>
-            <ReanalyzeButtons visibleIds={cards.map((c) => c.id)} bulkFormId="bulkForm" />
+          <div className="z-0 rounded-md p-2 mt-1 flex flex-col gap-2 text-xs bg-background/60 border">
+            <div className="text-muted-foreground">Run AI analysis again if previous attempt failed, or reanalyze all cards across all pages.</div>
+            <div className="flex items-center justify-between gap-2">
+              <ReanalyzeButtons visibleIds={cards.map((c) => c.id)} bulkFormId="bulkForm" />
+              <ReanalyzeAllButton category={category} />
+            </div>
           </div>
           {/* Bulk selection toolbar moved above; checkboxes below still use form="bulkForm" */}
           {cards.length === 0 && <div className="text-sm text-muted-foreground">No cards found.</div>}

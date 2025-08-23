@@ -1,3 +1,5 @@
+import { generateUniqueCardTitle } from "@/lib/ai/card-generator"
+
 export async function generateRarityAwareCardProperties(
   estimatedValue: number,
   rarity: string,
@@ -62,10 +64,8 @@ export async function generateRarityAwareCardProperties(
   const ratingRaw = Math.min(5, Math.max(1, 2.5 + rarityLevel * 0.5 + (estimatedValue || 0) / 500));
   const rating = Math.round(ratingRaw * 10) / 10;
 
-  // Simple title generation
-  const categoryName = (category || "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim() || "Card";
-  const baseName = fileName.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ");
-  const cardTitle = `${categoryName} ${baseName}`.trim();
+  // Unique, themed title generation (category-aware)
+  const cardTitle = await generateUniqueCardTitle({ category });
 
   return { cardTitle, attackPower, defense, speed, specialAbility, element, rarityLevel, rating };
 }
