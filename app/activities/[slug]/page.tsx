@@ -26,8 +26,11 @@ import FillBlanksRunner from "@/components/activities/fill-blanks/FillBlanksRunn
 import MemoryGameActivity from "@/components/activities/memory/MemoryGameActivity"
 import InteractiveDemoActivity from "@/components/activities/interactive-demo/InteractiveDemoActivity"
 import DragDropActivity from "@/components/activities/drag-drop/DragDropActivity"
+import CodeBuilderActivity from "@/components/activities/code-builder/CodeBuilderActivity"
+import AlgorithmVisualizationActivity from "@/components/activities/algorithm-visualization/AlgorithmVisualizationActivity"
+import ClassBuilderActivity from "@/components/activities/class-builder/ClassBuilderActivity"
 
-type Props = { params: { slug: string } }
+type Props = { params: { slug: string }; searchParams?: Promise<Record<string, string | string[] | undefined>> }
 
 type ActivityDetailDTO = {
   id: string
@@ -204,8 +207,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function ActivityDetailPage({ params }: Props) {
+export default async function ActivityDetailPage({ params, searchParams }: Props) {
   const awaitedParams = await params
+  // Read incoming query params (if navigated from activities list) to preserve filter state on back navigation
+  const spAny = searchParams ? await searchParams : {}
+  const getParam = (key: string): string | undefined => {
+    const v = (spAny as Record<string, string | string[] | undefined>)[key]
+    if (Array.isArray(v)) return v[0]
+    if (typeof v === "string") return v
+    return undefined
+  }
+  const backParams = new URLSearchParams()
+  const categoryParam = getParam("category")
+  const typeParam = getParam("type")
+  if (categoryParam) backParams.set("category", categoryParam)
+  if (typeParam) backParams.set("type", typeParam)
+  const backHref = backParams.toString() ? `/activities?${backParams.toString()}` : "/activities"
   const activity = await getActivityBySlugOrId(awaitedParams.slug)
   if (!activity) {
     notFound()
@@ -227,6 +244,9 @@ export default async function ActivityDetailPage({ params }: Props) {
   let memoryContent: any | null = null
   let interactiveContent: any | null = null
   let dragDropContent: any | null = null
+  let codeBuilderContent: any | null = null
+  let classBuilderContent: any | null = null
+  let algorithmVizContent: any | null = null
 
   const typeLower = String(activity.activityType || "").toLowerCase()
 
@@ -336,7 +356,7 @@ export default async function ActivityDetailPage({ params }: Props) {
     } catch (e) {
       // ignore; FillBlanksRunner has sensible defaults
     }
-  } else if (["drag_drop", "drag-drop", "drag & drop", "drag and drop", "dragdrop", "code builder", "code_builder"].includes(typeLower)) {
+  } else if (["drag_drop", "drag-drop", "drag & drop", "drag and drop", "dragdrop"].includes(typeLower)) {
     try {
       const raw = activity.content ? JSON.parse(activity.content) : null
       if (raw && typeof raw === "object") {
@@ -356,6 +376,24 @@ export default async function ActivityDetailPage({ params }: Props) {
     } catch {
       // ignore malformed JSON; component will show configuration error
     }
+  } else if (["code builder", "code_builder"].includes(typeLower)) {
+    try {
+      const raw = activity.content ? JSON.parse(activity.content) : null
+      if (raw && typeof raw === "object") {
+        codeBuilderContent = raw
+      }
+    } catch {
+      // ignore; CodeBuilderActivity can work with empty/defaults
+    }
+  } else if (["class builder", "class_builder"].includes(typeLower)) {
+    try {
+      const raw = activity.content ? JSON.parse(activity.content) : null
+      if (raw && typeof raw === "object") {
+        classBuilderContent = raw
+      }
+    } catch {
+      // ignore; ClassBuilderActivity will normalize empty/defaults
+    }
   } else if (["interactive demo", "interactive_demo"].includes(typeLower)) {
     try {
       const raw = activity.content ? JSON.parse(activity.content) : null
@@ -367,6 +405,20 @@ export default async function ActivityDetailPage({ params }: Props) {
       }
     } catch {
       // ignore malformed JSON; component will use activity title/description defaults
+    }
+  } else if (["algorithm visualization", "algorithm_visualization"].includes(typeLower)) {
+    // activity.content may already be an object or a JSON string
+    if (activity && typeof (activity as any).content === "object" && (activity as any).content !== null) {
+      algorithmVizContent = (activity as any).content as any
+    } else if (typeof (activity as any).content === "string") {
+      try {
+        const raw = JSON.parse((activity as any).content as any)
+        if (raw && typeof raw === "object") {
+          algorithmVizContent = raw
+        }
+      } catch {
+        // ignore malformed JSON; component will show default
+      }
     }
   }
 
@@ -425,7 +477,7 @@ export default async function ActivityDetailPage({ params }: Props) {
         />
         <div className="mb-6">
           <Button asChild variant="outline">
-            <Link href="/activities">
+            <Link href={backHref}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Activities
             </Link>
@@ -525,11 +577,25 @@ export default async function ActivityDetailPage({ params }: Props) {
                   content: memoryContent ?? { cards: [], rules: "", timeLimit: activity.estimatedMinutes * 60 },
                 } as any}
               />
-            ) : ["drag_drop", "drag-drop", "drag & drop", "drag and drop", "dragdrop", "code builder", "code_builder"].includes(String(activity.activityType || "").toLowerCase()) ? (
+            ) : ["drag_drop", "drag-drop", "drag & drop", "drag and drop", "dragdrop"].includes(String(activity.activityType || "").toLowerCase()) ? (
               <DragDropActivity
                 activity={{
                   ...activity,
                   content: dragDropContent ?? {},
+                } as any}
+              />
+            ) : ["code builder", "code_builder"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <CodeBuilderActivity
+                activity={{
+                  ...activity,
+                  content: codeBuilderContent ?? {},
+                } as any}
+              />
+            ) : ["class builder", "class_builder"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <ClassBuilderActivity
+                activity={{
+                  ...activity,
+                  content: classBuilderContent ?? (typeof (activity as any).content === "object" ? (activity as any).content : {}),
                 } as any}
               />
             ) : ["interactive demo", "interactive_demo"].includes(String(activity.activityType || "").toLowerCase()) ? (
@@ -537,6 +603,13 @@ export default async function ActivityDetailPage({ params }: Props) {
                 activity={{
                   ...activity,
                   content: interactiveContent ?? { title: activity.title, description: activity.description, steps: [] },
+                } as any}
+              />
+            ) : ["algorithm visualization", "algorithm_visualization"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <AlgorithmVisualizationActivity
+                activity={{
+                  ...activity,
+                  content: algorithmVizContent ?? (typeof (activity as any).content === "object" ? (activity as any).content : {}),
                 } as any}
               />
             ) : (

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Play, CheckCircle, Diamond, Zap, RotateCcw } from "lucide-react"
+import { Play, CheckCircle, Diamond, Zap, RotateCcw } from "lucide-react"
 import Link from "next/link"
 
 export const codingChallenges = [
@@ -122,19 +122,8 @@ export default function CodingLabClient() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Link href="/activities">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Activities
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Coding Lab</h1>
-            <p className="text-gray-600">Practice Python coding with interactive challenges</p>
-          </div>
-        </div>
+        {/* Title/description/back link removed: handled by page-level header */}
+        <div className="mb-6" />
 
         {/* Progress */}
         <div className="mb-6">

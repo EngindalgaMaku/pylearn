@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Clock, Gift, Play, RotateCcw, Star, Trophy } from "lucide-react"
 
 // Types aligned with the old component's expectations
@@ -49,6 +50,17 @@ interface GameCard extends Card {
 
 export default function MemoryGameActivity({ activity, onComplete }: MemoryGameActivityProps) {
   const rawContent = (activity?.content ?? {}) as any
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const backHref = useMemo(() => {
+    const category = searchParams?.get("category") || ""
+    const type = searchParams?.get("type") || ""
+    const qs = new URLSearchParams()
+    if (category) qs.set("category", category)
+    if (type) qs.set("type", type)
+    const s = qs.toString()
+    return s ? `/activities?${s}` : "/activities"
+  }, [searchParams])
 
   // Normalize content: support cards or pairs
   const cards: Card[] = Array.isArray(rawContent.cards)
@@ -373,9 +385,15 @@ export default function MemoryGameActivity({ activity, onComplete }: MemoryGameA
               <RotateCcw className="h-5 w-5" />
               <span>Play Again</span>
             </button>
-            <button onClick={handleManualComplete} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 font-semibold text-white">
-              🎉 Complete & Claim Rewards
-            </button>
+            {isAuthenticated ? (
+              <button onClick={handleManualComplete} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-6 py-3 font-semibold text-white">
+                🎉 Complete & Claim Rewards
+              </button>
+            ) : (
+              <button onClick={() => router.push(backHref)} className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground">
+                Finish and Go to List
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -385,8 +403,7 @@ export default function MemoryGameActivity({ activity, onComplete }: MemoryGameA
   // In-game board
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-foreground">{activity.title}</h2>
+      <div className="mb-6 flex items-center justify-end">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 text-primary">
             <Clock className="h-5 w-5" />

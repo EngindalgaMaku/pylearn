@@ -86,6 +86,7 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
   const [awardedXP, setAwardedXP] = useState<number>(xpReward)
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Initialize on config change
   useEffect(() => {
@@ -114,6 +115,22 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
     const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000)
     return () => clearTimeout(t)
   }, [phase, timeLeft])
+
+  // Auth check for unauthenticated finish button
+  useEffect(() => {
+    let cancelled = false
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" })
+        const json = await res.json().catch(() => null)
+        if (!cancelled) setIsAuthenticated(!!json?.user)
+      } catch {
+        if (!cancelled) setIsAuthenticated(false)
+      }
+    }
+    checkAuth()
+    return () => { cancelled = true }
+  }, [])
 
   const total = pairs.length
   const matchedCount = matchedIds.size
@@ -354,8 +371,7 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
               <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
                 <Puzzle className="w-8 h-8 text-primary" />
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold">{title || cfg.title}</h2>
-              <p className="text-muted-foreground">Match {pairs.length} terms with their definitions</p>
+              {/* Title/description removed: handled by page-level header */}
             </div>
 
             {cfg.instructions && (
@@ -433,7 +449,11 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
         <div className="flex gap-3 justify-center pb-2">
           <Link href={backHref}><Button variant="outline">Back to Activities</Button></Link>
           <Button variant="outline" onClick={resetRun}>Try Again</Button>
-          <Button onClick={() => handleClaimRewards()} disabled={completing || completed}>{completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}</Button>
+          {isAuthenticated ? (
+            <Button onClick={() => handleClaimRewards()} disabled={completing || completed}>{completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}</Button>
+          ) : (
+            <Button onClick={() => router.push(backHref)}>Finish and Go to List</Button>
+          )}
         </div>
       </div>
     )

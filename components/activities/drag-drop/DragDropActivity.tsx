@@ -11,6 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { toast } from "@/components/ui/use-toast";
 import {
   CheckCircle,
@@ -178,6 +185,9 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
   const [categoryMap, setCategoryMap] = useState<Record<string, ClassifyItem[]>>({});
   const [classifyDraggedItem, setClassifyDraggedItem] = useState<ClassifyItem | null>(null);
   const [shuffledCategories, setShuffledCategories] = useState<ClassifyCategory[]>([]);
+  // Mobile tap-to-assign state
+  const [assignTargetItem, setAssignTargetItem] = useState<ClassifyItem | null>(null);
+  const [assignFromCategoryId, setAssignFromCategoryId] = useState<string | null>(null);
 
   // ===== Refs =====
   const availableBlocksRef = useRef<HTMLDivElement | null>(null);
@@ -194,6 +204,55 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
     () => typeof window !== "undefined" && ("ontouchstart" in window || (navigator as any)?.maxTouchPoints > 0),
     []
   );
+
+  // One-time mobile tip
+  useEffect(() => {
+    try {
+      if (isTouchDevice && typeof window !== "undefined") {
+        const key = "dragdrop_mobile_tip_v1";
+        const shown = window.localStorage.getItem(key);
+        if (!shown) {
+          toast({
+            title: "Tip",
+            description: "On mobile, tap an item to place it.",
+            duration: 3500,
+          });
+          window.localStorage.setItem(key, "1");
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [isTouchDevice]);
+
+  // Haptics helper
+  const haptic = (ms = 10) => {
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).vibrate) {
+        (navigator as any).vibrate(ms);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // ===== Global window auto-scroll while dragging (mouse) =====
+  useEffect(() => {
+    const onWindowDragOver = (e: any) => {
+      try {
+        const viewportThreshold = 40;
+        if (e.clientY < viewportThreshold) {
+          window.scrollBy({ top: -20, behavior: "smooth" });
+        } else if (window.innerHeight - e.clientY < viewportThreshold) {
+          window.scrollBy({ top: 20, behavior: "smooth" });
+        }
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("dragover", onWindowDragOver);
+    return () => window.removeEventListener("dragover", onWindowDragOver);
+  }, []);
 
   // ===== Auth check =====
   useEffect(() => {
@@ -309,6 +368,18 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
     const x = clientX + 12;
     const y = clientY + 12;
     ov.style.transform = `translate(${Math.max(0, x)}px, ${Math.max(0, y)}px)`;
+
+    // Auto-scroll window near viewport edges during touch/pen drag
+    try {
+      const viewportThreshold = 40;
+      if (clientY < viewportThreshold) {
+        window.scrollBy({ top: -20, behavior: "smooth" });
+      } else if (window.innerHeight - clientY < viewportThreshold) {
+        window.scrollBy({ top: 20, behavior: "smooth" });
+      }
+    } catch {
+      // ignore
+    }
   };
   const cleanupOverlay = () => {
     const ov = overlayRef.current;
@@ -581,6 +652,51 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
       });
     } catch (error) {
       console.error("Remove item from category error:", error);
+    }
+  };
+
+  // ===== Mobile tap-to-assign helpers =====
+  const assignItemToCategory = (item: ClassifyItem, targetCategoryId: string) => {
+    try {
+      // Remove from all categories first
+      setCategoryMap((prev) => {
+        const newMap: Record<string, ClassifyItem[]> = {};
+        Object.keys(prev).forEach((cid) => {
+          newMap[cid] = prev[cid].filter((it) => it.id !== item.id);
+        });
+        // Add to selected category
+        if (!newMap[targetCategoryId]) newMap[targetCategoryId] = [];
+        if (!newMap[targetCategoryId].some((it) => it.id === item.id)) {
+          newMap[targetCategoryId].push(item);
+        }
+        return newMap;
+      });
+      // Remove from available pool if present
+      setAvailableItems((prev) => prev.filter((it) => it.id !== item.id));
+      haptic(12);
+    } catch (error) {
+      console.error("Assign item to category error:", error);
+    }
+  };
+
+  const returnItemToAvailable = (item: ClassifyItem) => {
+    try {
+      // Remove from all categories
+      setCategoryMap((prev) => {
+        const newMap: Record<string, ClassifyItem[]> = {};
+        Object.keys(prev).forEach((cid) => {
+          newMap[cid] = prev[cid].filter((it) => it.id !== item.id);
+        });
+        return newMap;
+      });
+      // Add back to available if not present
+      setAvailableItems((prev) => {
+        if (prev.some((it) => it.id === item.id)) return prev;
+        return [...prev, item].sort((a, b) => a.id - b.id);
+      });
+      haptic(8);
+    } catch (error) {
+      console.error("Return item to available error:", error);
     }
   };
 
@@ -927,18 +1043,51 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
     const placedCount = Object.values(categoryMap).reduce((sum, arr) => sum + arr.length, 0);
 
     return (
-      <div className="mx-auto max-w-6xl p-6 pb-24">
+      <div className="mx-auto max-w-6xl p-6 pb-24" onDragOver={handleDragOver}>
         {rewardModal}
         {alreadyClaimedModal}
-        {/* Header */}
-        <div className="mb-8">
-          <h2 className="mb-4 text-3xl font-bold text-gray-900">
-            {activity.title || "Drag & Drop Classification"}
-          </h2>
-          <p className="mb-6 text-lg text-gray-600">
-            {activity.description || "Drag each item into the correct category."}
-          </p>
-        </div>
+        {/* Mobile tap-to-assign bottom sheet */}
+        {isTouchDevice && assignTargetItem && (
+          <Drawer open={true} onOpenChange={(open: boolean) => { if (!open) { setAssignTargetItem(null); setAssignFromCategoryId(null); } }}>
+            <DrawerContent className="mx-auto w-full max-w-lg rounded-t-2xl">
+              <DrawerHeader className="text-center">
+                <DrawerTitle>Place item</DrawerTitle>
+                <DrawerDescription>Choose a category for this item.</DrawerDescription>
+              </DrawerHeader>
+              <div className="px-4 pb-4">
+                <div className="rounded-md border bg-white p-3">
+                  <pre className="whitespace-pre-wrap font-mono text-sm text-black">{assignTargetItem.value}</pre>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(shuffledCategories.length > 0 ? shuffledCategories : safeCategories).map((cat) => (
+                    <Button key={cat.id as any} variant="secondary" className="justify-start"
+                      onClick={() => {
+                        assignItemToCategory(assignTargetItem, String(cat.id));
+                        setAssignTargetItem(null);
+                        setAssignFromCategoryId(null);
+                      }}
+                    >
+                      {cat.name}
+                    </Button>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button variant="outline" className="flex-1"
+                    onClick={() => {
+                      returnItemToAvailable(assignTargetItem);
+                      setAssignTargetItem(null);
+                      setAssignFromCategoryId(null);
+                    }}
+                  >
+                    Return to Available
+                  </Button>
+                  <Button className="flex-1" onClick={() => { setAssignTargetItem(null); setAssignFromCategoryId(null); }}>Cancel</Button>
+                </div>
+              </div>
+            </DrawerContent>
+          </Drawer>
+        )}
+        {/* Header removed: handled by page-level layout */}
 
         {/* Progress */}
         <div className="mb-6">
@@ -975,6 +1124,12 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
                       draggable={!submitted}
                       onDragStart={(e) => handleClassifyDragStart(e, it)}
                       onPointerDown={(e) => (isTouchDevice ? startTouchDragClassify(e, it) : undefined)}
+                      onClick={() => {
+                        if (isTouchDevice && !submitted) {
+                          setAssignTargetItem(it);
+                          setAssignFromCategoryId(null);
+                        }
+                      }}
                       className={`cursor-move rounded-lg border-2 border-slate-300 bg-white p-3 transition-all hover:shadow-md ${
                         submitted ? "cursor-not-allowed opacity-50" : ""
                       }`}
@@ -1020,6 +1175,12 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
                               draggable={!submitted}
                               onDragStart={(e) => handleClassifyDragStart(e, it)}
                               onPointerDown={(e) => (isTouchDevice ? startTouchDragClassify(e, it) : undefined)}
+                              onClick={() => {
+                                if (isTouchDevice && !submitted) {
+                                  setAssignTargetItem(it);
+                                  setAssignFromCategoryId(String(cat.id));
+                                }
+                              }}
                               className="flex items-center justify-between rounded-lg border-2 border-slate-300 bg-white p-2"
                             >
                               <pre className="whitespace-pre-wrap font-mono text-sm">{it.value}</pre>
@@ -1058,13 +1219,22 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
             </button>
           ) : isCompleted ? (
             <>
-              <button
-                onClick={handleActivityCompletion}
-                disabled={completing || completed}
-                className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-              >
-                {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
-              </button>
+              {isAuthenticated ? (
+                <button
+                  onClick={handleActivityCompletion}
+                  disabled={completing || completed}
+                  className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                >
+                  {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push(backHref)}
+                  className="rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
+                >
+                  Finish and Go to List
+                </button>
+              )}
               <button
                 onClick={resetClassification}
                 className="inline-flex items-center space-x-2 rounded-lg bg-indigo-600 px-6 py-3 font-bold text-white transition-colors hover:bg-indigo-700"
@@ -1110,22 +1280,20 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
   const safeHints = hints || [];
 
   return (
-    <div className="mx-auto max-w-6xl p-6 pb-24">
+    <div className="mx-auto max-w-6xl p-6 pb-24" onDragOver={handleDragOver}>
       {rewardModal}
       {alreadyClaimedModal}
-      {/* Header */}
-      <div className="mb-8">
-        <h2 className="mb-4 text-3xl font-bold text-gray-900">{activity.title || "Drag & Drop Activity"}</h2>
-        <p className="mb-6 text-lg text-gray-600">{activity.description || "Complete this drag and drop activity."}</p>
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-          <div className="mb-2 flex items-center space-x-2">
-            <Target className="h-5 w-5 text-blue-600" />
-            <span className="font-semibold text-blue-900">Target:</span>
-          </div>
-          <p className="text-blue-800">{target || "Complete the activity"}</p>
+      {/* Header removed: handled by page-level layout */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mb-8">
+        <div className="mb-2 flex items-center space-x-2">
+          <Target className="h-5 w-5 text-blue-600" />
+          <span className="font-semibold text-blue-900">Target:</span>
+          <span className="text-blue-800">{target}</span>
+        </div>
+        <div className="text-sm text-blue-700">
+          Drag code blocks into the correct order to match the target output. Use hints if needed!
         </div>
       </div>
-
       {/* Progress */}
       <div className="mb-6">
         <div className="mb-2 flex items-center justify-between">
@@ -1250,13 +1418,22 @@ export default function DragDropActivity({ activity, onComplete }: DragDropActiv
           </button>
         ) : isCompleted ? (
           <>
-            <button
-              onClick={handleActivityCompletion}
-              disabled={completing || completed}
-              className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-            >
-              {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
-            </button>
+            {isAuthenticated ? (
+              <button
+                onClick={handleActivityCompletion}
+                disabled={completing || completed}
+                className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+              >
+                {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
+              </button>
+            ) : (
+              <button
+                onClick={() => router.push(backHref)}
+                className="rounded-lg bg-blue-600 px-6 py-3 font-bold text-white transition-colors hover:bg-blue-700"
+              >
+                Finish and Go to List
+              </button>
+            )}
             <button
               onClick={handleManualComplete}
               className="rounded-lg bg-slate-600 px-6 py-3 font-bold text-white transition-colors hover:bg-slate-700"

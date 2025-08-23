@@ -364,9 +364,15 @@ export default function InteractiveDemoActivity({
             </div>
           </div>
 
-          <Button onClick={handleClaimRewards} disabled={completing || completed} className="px-6">
-            {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
-          </Button>
+          {isAuthenticated ? (
+            <Button onClick={handleClaimRewards} disabled={completing || completed} className="px-6">
+              {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
+            </Button>
+          ) : (
+            <Button onClick={() => router.push(backHref)} className="px-6">
+              Finish and Go to List
+            </Button>
+          )}
         </div>
 
         {/* Reward Animation */}
@@ -407,10 +413,7 @@ export default function InteractiveDemoActivity({
             <Play className="h-8 w-8" />
           </div>
 
-          <h2 className="mb-2 text-3xl font-bold text-amber-900">{title}</h2>
-          {description && (
-            <p className="mb-8 text-lg text-amber-800">{description}</p>
-          )}
+          {/* Title/description removed: handled by page-level header */}
 
           <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
             <div className="rounded-lg bg-white p-4 shadow-sm">
@@ -456,12 +459,7 @@ export default function InteractiveDemoActivity({
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-8 text-center">
-        <h2 className="mb-4 text-3xl font-bold text-gray-900">
-          {activity.title}
-        </h2>
-        <p className="text-lg text-gray-600">{activity.description}</p>
-      </div>
+      {/* Title/description removed: handled by page-level header */}
 
       {/* Progress */}
       <div className="mb-8">

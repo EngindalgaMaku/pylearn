@@ -30,12 +30,19 @@ export async function POST(req: NextRequest) {
         // logoUrl defaults to `${base}/brand-snake.svg` inside the template
         supportEmail: process.env.CONTACT_TO || "info@pylearn.net",
       })
-      await sendMail({ to: user.email, subject: "Reset your PyLearn password", html })
+      // Send email but don't fail the request even if SMTP errors out
+      try {
+        await sendMail({ to: user.email, subject: "Reset your PyLearn password", html })
+      } catch (err) {
+        console.warn("password reset email send failed", err)
+      }
     }
 
     // Always respond with success to avoid user enumeration
     return NextResponse.json({ ok: true })
   } catch (e: any) {
-    return NextResponse.json({ error: "Server error", details: e?.message }, { status: 500 })
+    // Do not expose internal errors; return a generic success to avoid user enumeration
+    console.warn("password reset request error", e?.message)
+    return NextResponse.json({ ok: true })
   }
 }

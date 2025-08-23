@@ -68,6 +68,7 @@ export default function FillBlanksRunner({
   const [endTime, setEndTime] = useState<Date | null>(null)
   const [answers, setAnswers] = useState<string[]>(() => items.map(() => ""))
   const [correctMap, setCorrectMap] = useState<Record<number, boolean>>({})
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Rewards UI
   const [showRewardDialog, setShowRewardDialog] = useState(false)
@@ -81,6 +82,22 @@ export default function FillBlanksRunner({
     const t = setTimeout(() => setTimeLeft(s => s - 1), 1000)
     return () => clearTimeout(t)
   }, [started, completed, timeLeft])
+
+  // Auth check for unauthenticated finish button
+  useEffect(() => {
+    let cancelled = false
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" })
+        const json = await res.json().catch(() => null)
+        if (!cancelled) setIsAuthenticated(!!json?.user)
+      } catch {
+        if (!cancelled) setIsAuthenticated(false)
+      }
+    }
+    checkAuth()
+    return () => { cancelled = true }
+  }, [])
 
   function normalize(s: string) {
     return (s ?? "").trim().replace(/^['"]|['"]$/g, "").toLowerCase()
@@ -347,7 +364,11 @@ export default function FillBlanksRunner({
           <CardFooter className="flex items-center justify-between">
             <Button variant="ghost" onClick={reset}>Restart</Button>
             {completed ? (
-              <Button onClick={() => handleClaimRewards()} disabled={completing}>{completing ? "Processing..." : "Claim Rewards"}</Button>
+              isAuthenticated ? (
+                <Button onClick={() => handleClaimRewards()} disabled={completing}>{completing ? "Processing..." : "Claim Rewards"}</Button>
+              ) : (
+                <Button onClick={() => router.push(backHref)}>Finish and Go to List</Button>
+              )
             ) : (
               <Button onClick={handleSubmit} disabled={completing}>Submit</Button>
             )}

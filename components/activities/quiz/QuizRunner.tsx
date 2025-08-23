@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -56,8 +57,10 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
   const [awardedXP, setAwardedXP] = useState<number>(xpReward)
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { update } = useSession()
   const backHref = useMemo(() => {
     const category = searchParams?.get("category") || ""
     const type = searchParams?.get("type") || ""
@@ -92,6 +95,22 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
     setStartTime(null)
     setEndTime(null)
   }, [cfg])
+
+  // Auth check for unauthenticated completion flow button
+  useEffect(() => {
+    let cancelled = false
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" })
+        const json = await res.json().catch(() => null)
+        if (!cancelled) setIsAuthenticated(!!json?.user)
+      } catch {
+        if (!cancelled) setIsAuthenticated(false)
+      }
+    }
+    checkAuth()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (phase !== "in-progress") return
@@ -190,6 +209,21 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
         throw new Error(data?.error || `Activity could not be completed (HTTP ${res.status})`)
       }
       
+      // Refresh session immediately with updated user snapshot
+      const userAfter = data?.user
+      if (userAfter && typeof update === "function") {
+        try {
+          await update({
+            currentDiamonds: userAfter.currentDiamonds,
+            totalDiamonds: userAfter.totalDiamonds,
+            experience: userAfter.experience,
+            level: userAfter.level,
+          } as any)
+        } catch (e) {
+          console.warn("Session update after quiz completion failed:", e)
+        }
+      }
+
       const diamonds = data.rewards?.diamonds ?? 0
       const experience = data.rewards?.experience ?? 0
       setAwardedDiamonds(diamonds)
@@ -346,8 +380,7 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
               <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
                 <Play className="w-8 h-8 text-primary" />
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold">{title || cfg?.title}</h2>
-              <p className="text-muted-foreground">Test your knowledge with {total} multiple-choice questions</p>
+              {/* Title/description removed: handled by page-level header */}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -488,9 +521,15 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
             <Button variant="outline">Back to Activities</Button>
           </Link>
           <Button variant="outline" onClick={handleRetry}>Try Again</Button>
-          <Button onClick={handleClaimRewards} disabled={completing || completed}>
-            {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
-          </Button>
+          {isAuthenticated ? (
+            <Button onClick={handleClaimRewards} disabled={completing || completed}>
+              {completing ? "Processing..." : completed ? "Completed" : "Claim Rewards"}
+            </Button>
+          ) : (
+            <Button onClick={() => router.push(backHref)}>
+              Finish and Go to List
+            </Button>
+          )}
         </div>
       </div>
     )
