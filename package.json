@@ -8,7 +8,8 @@
     "lint": "next lint",
     "start": "next start",
     "postinstall": "prisma generate",
-    "seed:challenges": "tsx scripts/seeds/challenges.ts"
+    "seed:challenges": "tsx scripts/seeds/challenges.ts",
+    "sql:add-bonusxp": "tsx scripts/sql/add-bonusxp.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

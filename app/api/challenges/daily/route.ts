@@ -58,6 +58,7 @@ export async function GET(_req: NextRequest) {
               gameKey: pick.key,
               createdAt: { gte: todayStart, lte: todayEnd },
             },
+            select: { score: true, correctCount: true, durationSec: true },
             orderBy: { createdAt: "desc" },
           })
         : null
