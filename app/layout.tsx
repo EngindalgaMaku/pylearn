@@ -4,6 +4,7 @@ import { Montserrat } from "next/font/google"
 import { Open_Sans } from "next/font/google"
 import "./globals.css"
 import { Footer } from "@/components/footer"
+import Script from "next/script"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import Providers from "./providers"
@@ -22,6 +23,7 @@ const openSans = Open_Sans({
 })
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://pylearn.net"
+const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "G-9WSSY1Y958"
 
 export const metadata: Metadata = {
   title: "PyLearn - Python Learning App",
@@ -45,6 +47,20 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${montserrat.variable} ${openSans.variable} antialiased`}>
       <body className="min-h-screen flex flex-col overflow-x-hidden">
+
+        {/* Google Analytics */}
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="ga-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GA_MEASUREMENT_ID}');
+          `}
+        </Script>
 
         {/* Desktop fixed nav */}
         <nav className="hidden md:block fixed top-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-b border-border z-40">

@@ -419,7 +419,7 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
                       className="md:size-default lg:px-6"
                       disabled={Boolean(dailyQuiz && dailyQuiz.quiz.expiresInSec <= 0)}
                     >
-                      {dailyQuiz?.progress?.completed ? "Completed" : dailyQuiz?.progress?.attempted ? "Continue" : "Take Quiz"}
+                      {dailyQuiz?.progress?.completed ? "Completed" : dailyQuiz?.progress?.attempted ? "Continue" : "Play Game"}
                     </Button>
                   </Link>
                 </div>

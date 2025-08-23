@@ -2,18 +2,11 @@
 // Base: 100 XP for level 1 -> 2, then increases by growth factor per level
 
 // Allow tuning via env with public visibility for client-side usage
+// These are statically replaced by Next.js during build for client bundles.
 // NEXT_PUBLIC_XP_BASE_XP_PER_LEVEL: number (default 100)
 // NEXT_PUBLIC_XP_GROWTH_FACTOR: number (default 1.15)
-function parseNumberEnv(key: string, fallback: number): number {
-  const raw = (process.env as any)?.[key]
-  if (raw == null) return fallback
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return fallback
-  return n
-}
-
-const RAW_BASE = parseNumberEnv("NEXT_PUBLIC_XP_BASE_XP_PER_LEVEL", 100)
-const RAW_GROWTH = parseNumberEnv("NEXT_PUBLIC_XP_GROWTH_FACTOR", 1.15)
+const RAW_BASE = Number(process.env.NEXT_PUBLIC_XP_BASE_XP_PER_LEVEL ?? "100")
+const RAW_GROWTH = Number(process.env.NEXT_PUBLIC_XP_GROWTH_FACTOR ?? "1.15")
 
 // Clamp to safe ranges
 export const BASE_XP_PER_LEVEL = Math.max(10, Math.round(RAW_BASE))
