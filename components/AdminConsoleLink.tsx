@@ -5,7 +5,13 @@ import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
-export default function AdminConsoleLink({ size = "sm" }: { size?: any }) {
+export default function AdminConsoleLink({
+  size = "sm",
+  variant = "default",
+}: {
+  size?: any;
+  variant?: any;
+}) {
   const { data } = useSession();
   const pathname = usePathname();
   const role = (data?.user as any)?.role as string | undefined;
@@ -13,6 +19,22 @@ export default function AdminConsoleLink({ size = "sm" }: { size?: any }) {
   if (!isAdmin) return null;
 
   const active = pathname?.startsWith("/console");
+
+  if (variant === "ghost") {
+    return (
+      <Link href="/console">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="flex-col gap-1 h-auto py-2 px-2"
+        >
+          <span className="text-lg">🛡️</span>
+          <span className="text-xs">Console</span>
+        </Button>
+      </Link>
+    );
+  }
+
   const base = "text-sm lg:text-base font-semibold inline-flex items-center gap-2";
   const styles = active
     ? "bg-amber-600 text-white hover:bg-amber-600 shadow-sm"

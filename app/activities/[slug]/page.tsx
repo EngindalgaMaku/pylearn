@@ -29,6 +29,7 @@ import DragDropActivity from "@/components/activities/drag-drop/DragDropActivity
 import CodeBuilderActivity from "@/components/activities/code-builder/CodeBuilderActivity"
 import AlgorithmVisualizationActivity from "@/components/activities/algorithm-visualization/AlgorithmVisualizationActivity"
 import ClassBuilderActivity from "@/components/activities/class-builder/ClassBuilderActivity"
+import InteractiveCodingActivity from "@/components/activities/interactive-coding/InteractiveCodingActivity"
 
 type Props = { params: { slug: string }; searchParams?: Promise<Record<string, string | string[] | undefined>> }
 
@@ -611,6 +612,13 @@ export default async function ActivityDetailPage({ params, searchParams }: Props
                   ...activity,
                   content: algorithmVizContent ?? (typeof (activity as any).content === "object" ? (activity as any).content : {}),
                 } as any}
+              />
+            ) : ["interactive coding", "interactive_coding"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <InteractiveCodingActivity
+                activity={{
+                  ...activity,
+                  content: typeof activity.content === "string" ? activity.content : JSON.stringify(activity.content),
+                }}
               />
             ) : (
               <div className="text-sm text-muted-foreground">

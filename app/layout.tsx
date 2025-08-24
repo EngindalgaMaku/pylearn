@@ -170,7 +170,7 @@ export default function RootLayout({
                     <span className="text-xs">Shop</span>
                   </Button>
                 </Link>
-                <AdminConsoleLink />
+                <AdminConsoleLink variant="ghost" />
               </div>
             </div>
           </nav>
