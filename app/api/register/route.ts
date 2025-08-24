@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { getAppBaseUrl, sendWelcomeEmailSafe } from "@/lib/mail";
 
 function isValidEmail(email: string) {
   // Simple email validation
@@ -85,6 +86,19 @@ export async function POST(req: NextRequest) {
         username: true,
       },
     });
+
+    // Fire-and-forget welcome email (do not block or fail registration)
+    try {
+      const baseUrl = getAppBaseUrl();
+      void sendWelcomeEmailSafe({
+        to: user.email,
+        userName: user.username,
+        siteName: process.env.NEXT_PUBLIC_SITE_NAME || "PyLearn",
+        dashboardUrl: `${baseUrl}/dashboard`,
+      }).catch((e) => console.warn("Welcome email send error (register route)", e));
+    } catch (e) {
+      console.warn("Failed to trigger welcome email (swallowed)", e);
+    }
 
     return NextResponse.json({ success: true, user }, { status: 201 });
   } catch (error) {

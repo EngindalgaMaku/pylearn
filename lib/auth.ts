@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth/next";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { pbkdf2Sync } from "crypto";
+import { getAppBaseUrl, sendWelcomeEmailSafe } from "@/lib/mail";
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
@@ -168,6 +169,19 @@ export const authOptions: NextAuthOptions = {
                 isPremium: false,
               },
             });
+
+            // Fire-and-forget welcome email for new Google users
+            try {
+              const baseUrl = getAppBaseUrl();
+              void sendWelcomeEmailSafe({
+                to: newUser.email!,
+                userName: newUser.username,
+                siteName: process.env.NEXT_PUBLIC_SITE_NAME || "PyLearn",
+                dashboardUrl: `${baseUrl}/dashboard`,
+              }).catch((e) => console.warn("Welcome email send error (Google signup)", e));
+            } catch (e) {
+              console.warn("Failed to trigger welcome email (Google signup, swallowed)", e);
+            }
 
             await prisma.account.create({
               data: {

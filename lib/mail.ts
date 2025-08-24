@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer"
+import { welcomeEmailHTML } from "./emailTemplates"
 
 const SMTP_HOST = process.env.SMTP_HOST
 const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined
@@ -11,6 +12,30 @@ export function getAppBaseUrl() {
   // Prefer NEXTAUTH_URL if set, else VERCEL_URL, else APP_URL
   const fromEnv = process.env.NEXTAUTH_URL || process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
   return fromEnv || "http://localhost:3000"
+}
+
+export async function sendWelcomeEmailSafe(opts: {
+  to: string
+  userName?: string
+  siteName?: string
+  dashboardUrl?: string
+}) {
+  try {
+    const html = welcomeEmailHTML({
+      userName: opts.userName,
+      siteName: opts.siteName,
+      dashboardUrl: opts.dashboardUrl,
+    })
+    await sendMail({
+      to: opts.to,
+      subject: `Welcome to ${opts.siteName || "PyLearn"}!`,
+      html,
+    })
+    return { ok: true }
+  } catch (err) {
+    console.warn("Welcome email failed to send (swallowed)", err)
+    return { ok: false, error: String(err) }
+  }
 }
 
 export async function sendMail(options: { to: string; subject: string; html: string; text?: string }) {
