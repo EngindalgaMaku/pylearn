@@ -30,6 +30,7 @@ import CodeBuilderActivity from "@/components/activities/code-builder/CodeBuilde
 import AlgorithmVisualizationActivity from "@/components/activities/algorithm-visualization/AlgorithmVisualizationActivity"
 import ClassBuilderActivity from "@/components/activities/class-builder/ClassBuilderActivity"
 import InteractiveCodingActivity from "@/components/activities/interactive-coding/InteractiveCodingActivity"
+import DataExplorationActivity from "@/components/activities/data-exploration/DataExplorationActivity"
 
 type Props = { params: { slug: string }; searchParams?: Promise<Record<string, string | string[] | undefined>> }
 
@@ -46,7 +47,7 @@ type ActivityDetailDTO = {
   estimatedMinutes: number
   isLocked: boolean
   tags: string[]
-  content?: string
+  content?: any
 }
 
 function labelizeType(type: string) {
@@ -134,7 +135,7 @@ async function getActivityBySlugOrId(slugOrId: string): Promise<ActivityDetailDT
     estimatedMinutes: Number(row.estimatedMinutes ?? 5),
     isLocked: Boolean(row.isLocked),
     tags,
-    content: typeof row.content === "string" ? row.content : undefined,
+    content: typeof row.content === "string" || typeof row.content === "object" ? (row.content as any) : undefined,
   }
 }
 
@@ -248,6 +249,7 @@ export default async function ActivityDetailPage({ params, searchParams }: Props
   let codeBuilderContent: any | null = null
   let classBuilderContent: any | null = null
   let algorithmVizContent: any | null = null
+  let dataExplorationContent: any | null = null
 
   const typeLower = String(activity.activityType || "").toLowerCase()
 
@@ -394,6 +396,34 @@ export default async function ActivityDetailPage({ params, searchParams }: Props
       }
     } catch {
       // ignore; ClassBuilderActivity will normalize empty/defaults
+    }
+  } else if (["algorithm visualization", "algorithm_visualization"].includes(typeLower)) {
+    // activity.content may already be an object or a JSON string
+    if (activity && typeof (activity as any).content === "object" && (activity as any).content !== null) {
+      algorithmVizContent = (activity as any).content as any
+    } else if (typeof (activity as any).content === "string") {
+      try {
+        const raw = JSON.parse((activity as any).content as any)
+        if (raw && typeof raw === "object") {
+          algorithmVizContent = raw
+        }
+      } catch {
+        // ignore malformed JSON; component will show default
+      }
+    }
+  } else if (["data exploration", "data_exploration"].includes(typeLower)) {
+    // Accept both object content (already parsed from DB) and JSON string
+    if (activity && typeof (activity as any).content === "object" && (activity as any).content !== null) {
+      dataExplorationContent = (activity as any).content as any
+    } else if (typeof (activity as any).content === "string") {
+      try {
+        const raw = JSON.parse((activity as any).content as any)
+        if (raw && typeof raw === "object") {
+          dataExplorationContent = raw
+        }
+      } catch {
+        // ignore; component will show configuration error if needed
+      }
     }
   } else if (["interactive demo", "interactive_demo"].includes(typeLower)) {
     try {
@@ -619,6 +649,13 @@ export default async function ActivityDetailPage({ params, searchParams }: Props
                   ...activity,
                   content: typeof activity.content === "string" ? activity.content : JSON.stringify(activity.content),
                 }}
+              />
+            ) : ["data exploration", "data_exploration"].includes(String(activity.activityType || "").toLowerCase()) ? (
+              <DataExplorationActivity
+                activity={{
+                  ...activity,
+                  content: dataExplorationContent ?? {},
+                } as any}
               />
             ) : (
               <div className="text-sm text-muted-foreground">
