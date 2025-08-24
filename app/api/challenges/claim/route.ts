@@ -7,20 +7,29 @@ export async function POST(req: NextRequest) {
   try {
     const session = (await getServerSession(authOptions as any)) as any
     const userId = (session?.user as any)?.id as string | undefined
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!userId)
+      return NextResponse.json({ success: false, error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 })
 
     const { challengeId } = (await req.json()) as { challengeId?: string }
-    if (!challengeId) return NextResponse.json({ error: "challengeId is required" }, { status: 400 })
+    if (!challengeId)
+      return NextResponse.json({ success: false, error: "challengeId is required", code: "BAD_REQUEST" }, { status: 400 })
 
     const progress = await prisma.userChallengeProgress.findUnique({
       where: { userId_challengeId: { userId, challengeId } },
     })
-    if (!progress) return NextResponse.json({ error: "Progress not found" }, { status: 404 })
-    if (!progress.isCompleted) return NextResponse.json({ error: "Challenge not completed" }, { status: 400 })
-    if (progress.rewardsClaimed) return NextResponse.json({ error: "Rewards already claimed" }, { status: 400 })
+    if (!progress)
+      return NextResponse.json({ success: false, error: "Progress not found", code: "NOT_FOUND" }, { status: 404 })
+    if (!progress.isCompleted)
+      return NextResponse.json({ success: false, error: "Challenge not completed", code: "NOT_COMPLETED" }, { status: 400 })
+    if (progress.rewardsClaimed)
+      return NextResponse.json(
+        { success: false, error: "Rewards already claimed", code: "ALREADY_CLAIMED", alreadyClaimed: true, progress },
+        { status: 409 }
+      )
 
     const challenge = await prisma.weeklyChallenge.findUnique({ where: { id: challengeId } })
-    if (!challenge) return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
+    if (!challenge)
+      return NextResponse.json({ success: false, error: "Challenge not found", code: "NOT_FOUND" }, { status: 404 })
 
     const diamonds = challenge.diamondReward ?? 0
     const xp = challenge.experienceReward ?? 0
@@ -32,6 +41,7 @@ export async function POST(req: NextRequest) {
           currentDiamonds: { increment: diamonds },
           experience: { increment: xp },
         },
+        select: { id: true, level: true, experience: true, currentDiamonds: true, totalDiamonds: true },
       })
 
       await tx.userChallengeProgress.update({
@@ -62,6 +72,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, progress: updatedProgress, user: result.updatedUser, reward: { xp, diamonds } })
   } catch (e: any) {
     console.error("/api/challenges/claim POST error:", e)
-    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 })
+    return NextResponse.json({ success: false, error: e?.message || "Server error", code: "SERVER_ERROR" }, { status: 500 })
   }
 }

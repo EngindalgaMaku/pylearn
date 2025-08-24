@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Clock, CheckCircle, XCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useSpeedTimer } from "@/hooks/useSpeedTimer"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // Function Calls: given a small function and call, choose the correct output
 
@@ -89,6 +90,9 @@ export default function FunctionCallsGame() {
   const runStartRef = useRef<number | null>(null)
   const postedRef = useRef(false)
   const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
+  const [showReward, setShowReward] = useState(false)
+  const [prevXP, setPrevXP] = useState<number | null>(null)
+  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
   const { timeLeft, bonusXP, lastBonus, markQuestionStart, registerAnswerCorrect, resetBonuses } = useSpeedTimer(
     QUESTION_TIME,
     started,
@@ -128,8 +132,13 @@ export default function FunctionCallsGame() {
         try {
           const curXP = (session?.user as any)?.experience ?? 0
           const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+          setPrevXP(curXP)
+          setPrevDiamonds(curDiamonds)
           await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
-        } catch {}
+          setShowReward(true)
+        } catch {
+          setShowReward(true)
+        }
       } catch (e) {
         toast({ title: "Session save failed", description: "Could not record your Function Calls session.", variant: "destructive" })
       }
@@ -188,6 +197,39 @@ export default function FunctionCallsGame() {
               <div className="flex gap-3"><Button onClick={restart} variant="outline" className="flex-1 bg-transparent">Play Again</Button><Link href="/games" className="flex-1"><Button className="w-full">More Games</Button></Link></div>
             </CardContent>
           </Card>
+          {/* Rewards Popup */}
+          <Dialog open={showReward} onOpenChange={setShowReward}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
+                <DialogDescription className="text-center">Keep playing to earn more XP and diamonds.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="rounded-lg border p-3 bg-primary/5 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="text-2xl">⭐</span><span className="font-medium">XP</span></div>
+                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div></div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.xp ?? 0}</span></div>
+                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevXP ?? (session?.user as any)?.experience ?? 0) + (reward?.xp ?? 0)}</span></div>
+                  </div>
+                  <div className="rounded-lg border p-3 bg-secondary/10 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="font-medium">Diamonds</span></div>
+                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div></div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.diamonds ?? 0}</span></div>
+                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (reward?.diamonds ?? 0)}</span></div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={() => setShowReward(false)}>Keep Playing ▶️</Button>
+                  <Link href="/games" className="flex-1"><Button variant="outline" className="w-full">More Games</Button></Link>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </main>
       </div>
     )

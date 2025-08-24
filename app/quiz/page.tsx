@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import QuizRunner from "@/components/quiz/QuizRunner"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+export const runtime = "nodejs"
+
 type QuizQuestion = {
   id: string | number
   question: string

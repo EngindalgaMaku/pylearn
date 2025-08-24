@@ -1,6 +1,11 @@
 import { MetadataRoute } from 'next'
 import { prisma } from '@/lib/prisma'
 
+// Ensure this route runs on the Node.js runtime (Prisma is not Edge-compatible)
+export const runtime = 'nodejs'
+// Always compute fresh sitemap data
+export const dynamic = 'force-dynamic'
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://pylearn.net'
 

@@ -6,6 +6,8 @@ import type { Metadata } from "next"
 import Script from "next/script"
 import HomeClient from "@/components/home/HomeClient"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 
 type ActivityItem = {
   id: string
@@ -97,6 +99,21 @@ async function getJson<T>(url: string): Promise<T | null> {
 }
 
 export default async function Page() {
+  // Seed auth on SSR to avoid client "loading" flashes for bots
+  const session = await getServerSession(authOptions)
+  const initialAuth = session?.user
+    ? {
+        status: "authenticated" as const,
+        user: {
+          name: (session.user as any)?.name ?? undefined,
+          email: session.user.email ?? undefined,
+          username: (session.user as any)?.username ?? undefined,
+          experience: (session.user as any)?.experience ?? 0,
+          currentDiamonds: (session.user as any)?.currentDiamonds ?? 0,
+          loginStreak: (session.user as any)?.loginStreak ?? 1,
+        },
+      }
+    : { status: "unauthenticated" as const }
   // 1) Daily and metadata
   const dailyPromise = getJson<{ success: boolean; items: ActivityItem[]; total?: number }>("/api/learn/activities?page=1&pageSize=1")
   const nextPromise = getJson<{ success: boolean; next: ActivityItem | null }>("/api/learn/activities?status=next")
@@ -198,6 +215,7 @@ export default async function Page() {
         tip={tip}
         randomActivity={randomActivity}
         leaderboardCurrentUser={leaderboardCurrentUser}
+        initialAuth={initialAuth}
       />
       <Script id="ld-home-website" type="application/ld+json" strategy="afterInteractive">
         {JSON.stringify({

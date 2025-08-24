@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -20,6 +21,14 @@ import {
   Award,
 } from "lucide-react"
 import { getMatchingConfig, type MatchingConfig, type MatchingPair } from "./matching-banks"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export type Props = {
   slug: string
@@ -87,6 +96,9 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [prevXP, setPrevXP] = useState<number | null>(null)
+  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
+  const { data: session, update } = useSession()
 
   // Initialize on config change
   useEffect(() => {
@@ -270,6 +282,27 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
         throw new Error(data?.error || `Activity could not be completed (HTTP ${res.status})`)
       }
 
+      // Capture previous totals before updating session
+      const currentXP = (session?.user as any)?.experience ?? 0
+      const currentDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+      setPrevXP(currentXP)
+      setPrevDiamonds(currentDiamonds)
+
+      // Update session with returned user snapshot
+      const userAfter = data?.user
+      if (userAfter && typeof update === "function") {
+        try {
+          await update({
+            currentDiamonds: userAfter.currentDiamonds,
+            totalDiamonds: userAfter.totalDiamonds,
+            experience: userAfter.experience,
+            level: userAfter.level,
+          } as any)
+        } catch (e) {
+          console.warn("Session update after matching completion failed:", e)
+        }
+      }
+
       const diamonds = data.rewards?.diamonds ?? 0
       const experience = data.rewards?.experience ?? 0
       setAwardedDiamonds(diamonds)
@@ -284,9 +317,7 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
         setCompleted(true)
       }
 
-      setTimeout(() => {
-        window.location.href = backHref
-      }, 3000)
+      // Do not auto-redirect; let user navigate via dialog buttons
     } catch (error) {
       toast({ title: "Error", description: "An error occurred while completing the activity. Please try again.", variant: "destructive" })
     } finally {
@@ -294,66 +325,59 @@ export default function MatchingRunner({ slug, title, diamondReward = 10, xpRewa
     }
   }
 
-  // Auto-redirect when modal is shown after a delay
-  useEffect(() => {
-    if (showRewardDialog || showAlreadyClaimedDialog) {
-      const timer = setTimeout(() => router.push(backHref), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [showRewardDialog, showAlreadyClaimedDialog, router, backHref])
-
-  // Simple inline modals using Card for consistency
+  // Games-style reward dialogs using Dialog
   const RewardModal = () => (
-    showRewardDialog ? (
-      <Card className="sm:max-w-md mx-auto mb-4">
-        <CardHeader>
-          <CardTitle className="text-center">Congratulations! 🎉</CardTitle>
-          <CardDescription className="text-center">Rewards will be applied to your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center gap-6 py-2">
-            <div className="flex flex-col items-center">
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-2">
-                <Diamond className="w-8 h-8 text-blue-600" />
+    <Dialog open={showRewardDialog} onOpenChange={(open) => { setShowRewardDialog(open); if (!open) router.push(backHref) }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
+          <DialogDescription className="text-center">Keep learning to earn more XP and diamonds.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3">
+            <div className="rounded-lg border p-3 bg-primary/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2"><span className="text-2xl">⭐</span><span className="font-medium">XP</span></div>
+                <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div></div>
               </div>
-              <div className="text-2xl font-bold">{awardedDiamonds}</div>
-              <div className="text-sm text-muted-foreground">Diamonds</div>
+              <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{awardedXP ?? 0}</span></div>
+              <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevXP ?? (session?.user as any)?.experience ?? 0) + (awardedXP ?? 0)}</span></div>
             </div>
-            <div className="flex flex-col items-center">
-              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mb-2">
-                <Award className="w-8 h-8 text-amber-600" />
+            <div className="rounded-lg border p-3 bg-secondary/10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="font-medium">Diamonds</span></div>
+                <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div></div>
               </div>
-              <div className="text-2xl font-bold">{awardedXP}</div>
-              <div className="text-sm text-muted-foreground">Experience</div>
+              <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{awardedDiamonds ?? 0}</span></div>
+              <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (awardedDiamonds ?? 0)}</span></div>
             </div>
           </div>
-          <p className="text-center text-muted-foreground mt-2">Redirecting to activities page in 3 seconds...</p>
-          <div className="flex justify-center mt-3">
-            <Button onClick={() => { setShowRewardDialog(false); router.push(backHref) }}>Back to Activities</Button>
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={() => { setShowRewardDialog(false); router.push(backHref) }}>Back to Activities</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setShowRewardDialog(false)}>Close</Button>
           </div>
-        </CardContent>
-      </Card>
-    ) : null
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 
   const AlreadyModal = () => (
-    showAlreadyClaimedDialog ? (
-      <Card className="sm:max-w-md mx-auto mb-4">
-        <CardHeader>
-          <CardTitle className="text-center">Already Completed</CardTitle>
-          <CardDescription className="text-center">You've already claimed these rewards.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-2">
+    <Dialog open={showAlreadyClaimedDialog} onOpenChange={(open) => { setShowAlreadyClaimedDialog(open); if (!open) router.push(backHref) }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-center">Already Completed</DialogTitle>
+          <DialogDescription className="text-center">You've already claimed these rewards.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col items-center justify-center gap-4 py-2">
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-2">
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
-          <p className="text-center text-muted-foreground">Redirecting to activities page in 3 seconds...</p>
-          <div className="flex justify-center mt-3">
-            <Button onClick={() => { setShowAlreadyClaimedDialog(false); router.push(backHref) }}>Back to Activities</Button>
-          </div>
-        </CardContent>
-      </Card>
-    ) : null
+        </div>
+        <DialogFooter className="flex justify-center">
+          <Button onClick={() => { setShowAlreadyClaimedDialog(false); router.push(backHref) }}>Back to Activities</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 
   if (!cfg) {

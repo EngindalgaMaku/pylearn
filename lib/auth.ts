@@ -5,7 +5,14 @@ import { getServerSession } from "next-auth/next";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { pbkdf2Sync } from "crypto";
-import { getAppBaseUrl, sendWelcomeEmailSafe } from "@/lib/mail";
+// Avoid importing mailer (Nodemailer) at top-level to keep this module Edge-safe.
+function getAppBaseUrl() {
+  const fromEnv =
+    process.env.NEXTAUTH_URL ||
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+  return fromEnv || "http://localhost:3000";
+}
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
@@ -170,17 +177,26 @@ export const authOptions: NextAuthOptions = {
               },
             });
 
-            // Fire-and-forget welcome email for new Google users
+            // Fire-and-forget welcome email for new Google users (server-only dynamic import)
             try {
               const baseUrl = getAppBaseUrl();
-              void sendWelcomeEmailSafe({
-                to: newUser.email!,
-                userName: newUser.username,
-                siteName: process.env.NEXT_PUBLIC_SITE_NAME || "PyLearn",
-                dashboardUrl: `${baseUrl}/dashboard`,
-              }).catch((e) => console.warn("Welcome email send error (Google signup)", e));
+              import("@/lib/mail").then(({ sendWelcomeEmailSafe }) => {
+                void sendWelcomeEmailSafe({
+                  to: newUser.email!,
+                  userName: newUser.username,
+                  siteName: process.env.NEXT_PUBLIC_SITE_NAME || "PyLearn",
+                  dashboardUrl: `${baseUrl}/dashboard`,
+                }).catch((e: any) =>
+                  console.warn("Welcome email send error (Google signup)", e)
+                );
+              }).catch((e) => {
+                console.warn("Mailer module load failed (swallowed)", e);
+              });
             } catch (e) {
-              console.warn("Failed to trigger welcome email (Google signup, swallowed)", e);
+              console.warn(
+                "Failed to trigger welcome email (Google signup, swallowed)",
+                e
+              );
             }
 
             await prisma.account.create({

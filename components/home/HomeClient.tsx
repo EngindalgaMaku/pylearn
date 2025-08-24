@@ -40,6 +40,9 @@ type HomeClientProps = {
   tip: any | null
   randomActivity: ActivityItem | null
   leaderboardCurrentUser?: { userId: string; name: string; level: number; streak: number; xp: number; rank: number } | null
+  initialAuth?:
+    | { status: "authenticated"; user?: { name?: string; email?: string; username?: string; experience?: number; currentDiamonds?: number; loginStreak?: number } }
+    | { status: "unauthenticated" }
 }
 
 function difficultyLabel(d: number | string | undefined): string {
@@ -152,33 +155,27 @@ function describeCategory(name: string): string {
   return CATEGORY_DESCRIPTIONS[key] || `Explore ${name} with structured lessons from fundamentals to advanced practice.`
 }
 
-// Auth-aware card for "Welcome Back" vs "Join PyLearn"
-function AuthAwareCard() {
+// Auth-aware card for "Welcome Back" vs "Join PyLearn" (SSR-deterministic)
+function AuthAwareCard({ initialAuth }: { initialAuth?: HomeClientProps["initialAuth"] }) {
   const { data: session, status } = useSession()
 
-  if (status === "loading") {
-    return (
-      <Card className="bg-card border border-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="font-[family-name:var(--font-work-sans)] md:text-xl lg:text-2xl">Loading...</CardTitle>
-          <CardDescription className="md:text-base lg:text-lg">Preparing your personalized content</CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
+  // Prefer SSR-provided auth status to avoid loading flashes for crawlers
+  const effectiveStatus = initialAuth ? initialAuth.status : status
 
-  if (status === "authenticated" && session?.user) {
-    const user: any = session.user
+  if (effectiveStatus === "authenticated") {
+    const fallbackUser: any = initialAuth && initialAuth.status === "authenticated" ? (initialAuth.user ?? {}) : {}
+    const user: any = (status === "authenticated" && session?.user) ? session.user : fallbackUser
     const displayName =
       (user?.username as string) ||
-      (session.user as any)?.name ||
-      (session.user?.email ? session.user.email.split("@")[0] : "Friend")
+      (session?.user as any)?.name ||
+      (user?.name as string) ||
+      (user?.email ? (user.email as string).split("@")[0] : "Friend")
 
-    const experience = user?.experience ?? 0
+    const experience = (user as any)?.experience ?? 0
     const xp = getXPProgress(experience)
     const level = xp.level
-    const diamonds = user?.currentDiamonds ?? 0
-    const streak = user?.loginStreak ?? 1
+    const diamonds = (user as any)?.currentDiamonds ?? 0
+    const streak = (user as any)?.loginStreak ?? 1
 
     // Progress using scalable XP curve
     const progress = xp.progressPercent
@@ -229,7 +226,7 @@ function AuthAwareCard() {
     )
   }
 
-  // Guest view: polished, centered CTA card
+  // Guest view: polished, centered CTA card (also used during client loading if SSR says unauthenticated)
   return (
     <Card className="overflow-hidden border border-border bg-gradient-to-br from-primary/5 via-card to-secondary/5">
       <CardHeader className="pb-2 text-center">
@@ -291,7 +288,7 @@ function AuthAwareCard() {
 }
 
 export default function HomeClient(props: HomeClientProps) {
-  const { dailyChallenge, nextLesson, modules, tip, randomActivity, leaderboardCurrentUser } = props
+  const { dailyChallenge, nextLesson, modules, tip, randomActivity, leaderboardCurrentUser, initialAuth } = props
 
   const [rankUser, setRankUser] = useState<typeof leaderboardCurrentUser>(leaderboardCurrentUser)
   const [dailyQuiz, setDailyQuiz] = useState<{
@@ -405,7 +402,7 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
       {/* Main Content */}
       <main className="max-w-md mx-auto md:max-w-4xl lg:max-w-5xl xl:max-w-6xl px-4 py-8 space-y-8 md:space-y-10">
         {/* Auth-aware Welcome Section */}
-        <AuthAwareCard />
+        <AuthAwareCard initialAuth={initialAuth} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">

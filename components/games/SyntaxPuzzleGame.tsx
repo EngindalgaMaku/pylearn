@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, GripVertical } from "lucide-react"
 import Link from "next/link"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import GameSEOSection from "@/components/games/GameSEOSection"
 
 const puzzles = [
   {
@@ -46,6 +48,9 @@ export default function SyntaxPuzzleGame() {
   const postedRef = useRef(false)
   const { toast } = useToast()
   const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
+  const [showReward, setShowReward] = useState(false)
+  const [prevXP, setPrevXP] = useState<number | null>(null)
+  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
 
   const puzzle = puzzles[currentPuzzle]
 
@@ -104,6 +109,10 @@ export default function SyntaxPuzzleGame() {
     const postSession = async () => {
       if (!gameCompleted || postedRef.current) return
       postedRef.current = true
+      // Open modal immediately with best-known current totals; server values will replace shortly
+      setPrevXP((session?.user as any)?.experience ?? 0)
+      setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
+      setShowReward(true)
       const startedAt = runStartRef.current ?? Date.now()
       const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
       try {
@@ -121,12 +130,27 @@ export default function SyntaxPuzzleGame() {
         const data = await res.json().catch(() => ({}))
         const xp = data?.rewards?.xp ?? 0
         const diamonds = data?.rewards?.diamonds ?? 0
+        const beforeXP = data?.totals?.before?.xp
+        const beforeDiamonds = data?.totals?.before?.diamonds
+        const afterXP = data?.totals?.after?.xp
+        const afterDiamonds = data?.totals?.after?.diamonds
         setReward({ xp, diamonds })
+        if (typeof beforeXP === "number") setPrevXP(beforeXP); else setPrevXP((session?.user as any)?.experience ?? 0)
+        if (typeof beforeDiamonds === "number") setPrevDiamonds(beforeDiamonds); else setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
         try {
-          const curXP = (session?.user as any)?.experience ?? 0
-          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
-          await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
-        } catch {}
+          if (typeof afterXP === "number" || typeof afterDiamonds === "number") {
+            await update?.({
+              experience: typeof afterXP === "number" ? afterXP : ((session?.user as any)?.experience ?? 0) + xp,
+              currentDiamonds: typeof afterDiamonds === "number" ? afterDiamonds : ((session?.user as any)?.currentDiamonds ?? 0) + diamonds,
+            })
+          } else {
+            const curXP = (session?.user as any)?.experience ?? 0
+            const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+            await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
+          }
+        } catch {
+          // keep modal open even if update fails
+        }
       } catch (e) {
         console.error("Failed to post game session (syntax-puzzle)", e)
         toast({
@@ -176,11 +200,55 @@ export default function SyntaxPuzzleGame() {
                 <Badge variant="outline">Up to +10 XP + 💎</Badge>
               </div>
 
+              <GameSEOSection
+                title="Syntax Puzzle Game"
+                description="Arrange Python syntax blocks into valid code. Mobile-first UI with quick feedback to help you learn faster."
+                keywords={["python syntax", "drag and drop coding", "mobile python game", "learn python blocks", "coding puzzle"]}
+                features={["Tap-friendly drag alternatives (buttons)", "Clear visual feedback after each attempt", "XP and diamonds for correct solutions", "Short, focused challenges"]}
+                faq={[
+                  { q: "Do I need to drag?", a: "You can tap the up/down buttons to reorder on mobile." },
+                  { q: "How are rewards handled?", a: "1 XP and 1 diamond per correct puzzle; server totals are authoritative." },
+                ]}
+              />
+
               <Button onClick={startGame} className="w-full">
                 Start Puzzle
               </Button>
             </CardContent>
           </Card>
+          {/* Rewards Popup */}
+          <Dialog open={showReward} onOpenChange={setShowReward}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
+                <DialogDescription className="text-center">Keep playing to earn more XP and diamonds.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="rounded-lg border p-3 bg-primary/5 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="text-2xl">⭐</span><span className="font-medium">XP</span></div>
+                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div></div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.xp ?? 0}</span></div>
+                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevXP ?? (session?.user as any)?.experience ?? 0) + (reward?.xp ?? 0)}</span></div>
+                  </div>
+                  <div className="rounded-lg border p-3 bg-secondary/10 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="font-medium">Diamonds</span></div>
+                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div></div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.diamonds ?? 0}</span></div>
+                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (reward?.diamonds ?? 0)}</span></div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={() => setShowReward(false)}>Keep Playing ▶️</Button>
+                  <Link href="/games" className="flex-1"><Button variant="outline" className="w-full">More Games</Button></Link>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </main>
       </div>
     )

@@ -8,6 +8,8 @@ import { Search, Code, Flame } from "lucide-react"
 import Link from "next/link"
 import PythonTipWidget from "@/components/python-tip-widget"
 import { prisma } from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import type { Metadata } from "next"
 import { MobilePageHeader } from "@/components/mobile-page-header"
 
@@ -162,6 +164,8 @@ export default async function PythonTipsPage({ searchParams }: TipsPageProps) {
   const sp: SearchParams = (await Promise.resolve(searchParams)) || {}
   const page = Math.max(1, Number((sp.page || "1")))
   const where = buildWhere(sp)
+  const session = await getServerSession(authOptions)
+  const userId = (session?.user as any)?.id as string | undefined
 
   // Fetch counts only (categories filter removed)
   const totalCount = await prisma.pythonTip.count({ where })
@@ -181,7 +185,7 @@ export default async function PythonTipsPage({ searchParams }: TipsPageProps) {
   })
 
   // Map to PythonTipWidget shape
-  const items = tips.map((t) => ({
+  let items = tips.map((t) => ({
     id: t.id,
     title: t.title,
     content: t.content || "",
@@ -190,6 +194,29 @@ export default async function PythonTipsPage({ searchParams }: TipsPageProps) {
     difficulty: toTitleCaseDifficulty(t.difficulty),
     xpReward: (t as any).xpReward ?? 10,
   }))
+
+  // SSR: mark which of these tips the user has already completed
+  if (userId && items.length > 0) {
+    const tipIds = items.map((i) => i.id)
+    const interactions = await prisma.userPythonTipInteraction.findMany({
+      where: { userId, tipId: { in: tipIds }, hasCompleted: true },
+      select: { tipId: true },
+    })
+    const completedSet = new Set(interactions.map((x) => x.tipId))
+    items = items.map((i) => ({ ...i, isCompleted: completedSet.has(i.id) }))
+  }
+
+  // Compute remaining completions today (UTC) for the 3-per-day cap (only when logged in)
+  let remainingToday: number | null = null
+  if (userId) {
+    const now = new Date()
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999))
+    const completedToday = await prisma.userPythonTipInteraction.count({
+      where: { userId, hasCompleted: true, completedAt: { gte: start, lte: end } },
+    })
+    remainingToday = Math.max(0, 3 - completedToday)
+  }
 
   const currentDifficulty = sp.difficulty || "all"
   const qValue = sp.q || ""
@@ -261,6 +288,24 @@ export default async function PythonTipsPage({ searchParams }: TipsPageProps) {
           </p>
         </div>
 
+        {/* Daily reward limit banner */}
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="p-4 md:p-5 flex items-center justify-between gap-3">
+            {userId ? (
+              <div className="text-sm md:text-base text-blue-900">
+                <strong>{remainingToday}</strong> completions left today (max 3 tips grant XP per day)
+              </div>
+            ) : (
+              <div className="text-sm md:text-base text-blue-900">
+                Log in to earn XP from tips. You can earn rewards from up to <strong>3 tips per day</strong>.
+              </div>
+            )}
+            <div className="hidden md:block text-blue-700 text-xs">
+              UTC-based daily reset
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Stats Cards (live counts) */}
         <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           <Card className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
@@ -327,7 +372,7 @@ export default async function PythonTipsPage({ searchParams }: TipsPageProps) {
         {/* Tips List */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {items.map((tip) => (
-            <PythonTipWidget key={tip.id} tip={tip} />
+            <PythonTipWidget key={tip.id} tip={tip} mode="tips" />
           ))}
         </div>
 

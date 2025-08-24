@@ -26,8 +26,8 @@ const GAMES: Game[] = [
     difficulty: "Beginner",
     icon: "🧩",
     timeEstimate: "3 min",
-    xpReward: 10,
-    diamondReward: 2,
+    xpReward: 20,
+    diamondReward: 4,
     keywords: ["python", "match code", "output", "beginners"],
   },
   {
@@ -245,7 +245,7 @@ export default async function GamesPage() {
                         </CardDescription>
                       </div>
                     </div>
-                    <Badge variant="outline">{game.difficulty}</Badge>
+                    <Badge variant="outline">{game.id === "code-match" ? "Beginner • Advanced" : game.difficulty}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent>

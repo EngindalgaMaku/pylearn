@@ -58,9 +58,11 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [prevXP, setPrevXP] = useState<number | null>(null)
+  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { update } = useSession()
+  const { data: session, update } = useSession()
   const backHref = useMemo(() => {
     const category = searchParams?.get("category") || ""
     const type = searchParams?.get("type") || ""
@@ -182,7 +184,7 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
   async function handleClaimRewards() {
     try {
       setCompleting(true)
-      
+
       // Mark activity as completed
       const res = await fetch("/api/activities/complete", {
         method: "POST",
@@ -194,21 +196,19 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
         }),
         cache: "no-store",
       })
-      
-      if (res.status === 401) {
-        toast({
-          title: "Login required",
-          description: "You must log in to claim your rewards.",
-        })
-        return
-      }
-      
+
       const data = await res.json().catch(() => null)
-      
+
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || `Activity could not be completed (HTTP ${res.status})`)
       }
-      
+
+      // Capture previous totals BEFORE updating the session
+      const currentXP = (session?.user as any)?.experience ?? 0
+      const currentDiamonds = (session?.user as any)?.currentDiamonds ?? 0
+      setPrevXP(currentXP)
+      setPrevDiamonds(currentDiamonds)
+
       // Refresh session immediately with updated user snapshot
       const userAfter = data?.user
       if (userAfter && typeof update === "function") {
@@ -239,13 +239,7 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
         setCompleted(true)
         console.log("Showing reward dialog:", showRewardDialog)
       }
-      
-      // Directly redirect if modals don't work
-      setTimeout(() => {
-        console.log("Forcing redirect to /activities")
-        window.location.href = backHref
-      }, 3000)
-      
+      // No auto-redirect; user will navigate via dialog buttons
     } catch (error) {
       console.error("Activity completion error:", error)
       toast({
@@ -271,70 +265,77 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
     setEndTime(null)
   }
 
-  // Reward modals - must be declared before any early return to keep hooks order stable
-  useEffect(() => {
-    // Auto-redirect when modal is shown after a delay
-    if (showRewardDialog || showAlreadyClaimedDialog) {
-      const timer = setTimeout(() => {
-        router.push(backHref);
-      }, 3000); // 3 seconds delay
-      return () => clearTimeout(timer);
-    }
-  }, [showRewardDialog, showAlreadyClaimedDialog, router, backHref]);
-
-  // Define modals before any conditional returns so they can be rendered in any phase
+  // Define modals matching the games' reward dialog style
   const rewardModal = (
     <Dialog open={showRewardDialog} onOpenChange={(open) => {
-      setShowRewardDialog(open);
-      if (!open) router.push(backHref);
+      setShowRewardDialog(open)
+      if (!open) router.push(backHref)
     }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-center">Congratulations! 🎉</DialogTitle>
-          <DialogDescription className="text-center">
-            You have successfully completed the activity and earned your rewards.
-          </DialogDescription>
+          <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
+          <DialogDescription className="text-center">Keep learning to earn more XP and diamonds.</DialogDescription>
         </DialogHeader>
-        
-        <div className="flex flex-col items-center justify-center gap-6 py-4">
-          <div className="flex items-center gap-6">
-            <div className="flex flex-col items-center">
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-2">
-                <Diamond className="w-8 h-8 text-blue-600" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3">
+            <div className="rounded-lg border p-3 bg-primary/5 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">⭐</span>
+                  <span className="font-medium">XP</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-muted-foreground">Before</div>
+                  <div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div>
+                </div>
               </div>
-              <div className="text-2xl font-bold">{awardedDiamonds}</div>
-              <div className="text-sm text-muted-foreground">Diamonds</div>
+              <div className="mt-2 flex items-center justify-center gap-2 text-primary">
+                <span className="text-xs uppercase tracking-wide">+ Gained</span>
+                <span className="font-bold">{awardedXP ?? 0}</span>
+              </div>
+              <div className="mt-2 text-center text-sm text-muted-foreground">=
+                <span className="ml-2 font-semibold text-foreground">
+                  {(prevXP ?? (session?.user as any)?.experience ?? 0) + (awardedXP ?? 0)}
+                </span>
+              </div>
             </div>
-            
-            <div className="flex flex-col items-center">
-              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mb-2">
-                <Award className="w-8 h-8 text-amber-600" />
+
+            <div className="rounded-lg border p-3 bg-secondary/10 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">💎</span>
+                  <span className="font-medium">Diamonds</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-muted-foreground">Before</div>
+                  <div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div>
+                </div>
               </div>
-              <div className="text-2xl font-bold">{awardedXP}</div>
-              <div className="text-sm text-muted-foreground">Experience</div>
+              <div className="mt-2 flex items-center justify-center gap-2 text-primary">
+                <span className="text-xs uppercase tracking-wide">+ Gained</span>
+                <span className="font-bold">{awardedDiamonds ?? 0}</span>
+              </div>
+              <div className="mt-2 text-center text-sm text-muted-foreground">=
+                <span className="ml-2 font-semibold text-foreground">
+                  {(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (awardedDiamonds ?? 0)}
+                </span>
+              </div>
             </div>
           </div>
-          <p className="text-center text-muted-foreground mt-2">
-            Redirecting to activities page in 3 seconds...
-          </p>
+
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={() => { setShowRewardDialog(false); router.push(backHref) }}>Back to Activities</Button>
+            <Button variant="outline" className="flex-1" onClick={() => setShowRewardDialog(false)}>Close</Button>
+          </div>
         </div>
-        
-        <DialogFooter className="flex justify-center">
-          <Button onClick={() => {
-            setShowRewardDialog(false);
-            router.push(backHref);
-          }}>
-            Back to Activities
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 
   const alreadyClaimedModal = (
     <Dialog open={showAlreadyClaimedDialog} onOpenChange={(open) => {
-      setShowAlreadyClaimedDialog(open);
-      if (!open) router.push(backHref);
+      setShowAlreadyClaimedDialog(open)
+      if (!open) router.push(backHref)
     }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -343,7 +344,6 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
             You have already completed this activity and claimed your rewards.
           </DialogDescription>
         </DialogHeader>
-        
         <div className="flex flex-col items-center justify-center gap-4 py-4">
           <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-2">
             <CheckCircle className="w-8 h-8 text-green-600" />
@@ -351,16 +351,9 @@ export default function QuizRunner({ slug, title, diamondReward = 10, xpReward =
           <p className="text-center text-muted-foreground">
             No additional rewards will be given for completing the same activity multiple times.
           </p>
-          <p className="text-center text-muted-foreground mt-2">
-            Redirecting to activities page in 3 seconds...
-          </p>
         </div>
-        
         <DialogFooter className="flex justify-center">
-          <Button onClick={() => {
-            setShowAlreadyClaimedDialog(false);
-            router.push(backHref);
-          }}>
+          <Button onClick={() => { setShowAlreadyClaimedDialog(false); router.push(backHref) }}>
             Back to Activities
           </Button>
         </DialogFooter>

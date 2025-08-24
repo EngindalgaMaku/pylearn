@@ -11,13 +11,14 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await req.json()
-    const { gameKey, score = 0, correctCount = 0, durationSec = 0, completedAt, bonusXP = 0 } = body as {
+    const { gameKey, score = 0, correctCount = 0, durationSec = 0, completedAt, bonusXP = 0, difficulty } = body as {
       gameKey: string
       score?: number
       correctCount?: number
       durationSec?: number
       completedAt?: string | Date
       bonusXP?: number
+      difficulty?: "beginner" | "advanced"
     }
 
     if (!gameKey) return NextResponse.json({ error: "gameKey is required" }, { status: 400 })
@@ -42,30 +43,41 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Calculate rewards with caps
+    // Calculate rewards: default 1 XP and 1 diamond per correct answer
+    // If Code Match is played on advanced difficulty, apply a 2x multiplier
     const baseScore = Number(score) || 0
-    const xpFromScore = Math.max(1, Math.min(10, Math.round(baseScore / 10))) // 0-100 -> 0-10, min 1, max 10
-    const xpReward = Math.min(10, xpFromScore + Math.max(0, Math.min(10, Number(bonusXP) || 0))) // bonusXP limited within 0-10 window
-    const diamondReward = baseScore >= 80 ? 3 : baseScore >= 50 ? 2 : 1
+    const correct = Math.max(0, Number(correctCount) || 0)
+    const isAdvanced = (gameKey === "code-match") && (difficulty === "advanced")
+    const multiplier = isAdvanced ? 2 : 1
+    const xpReward = correct * multiplier
+    const diamondReward = correct * multiplier
 
-    // Persist rewards and transaction
+    // Persist rewards and transaction, while computing before/after totals
+    let beforeXP = 0, beforeDiamonds = 0, afterXP = 0, afterDiamonds = 0
     try {
       await prisma.$transaction(async (tx) => {
-        await tx.user.update({
+        const user = await tx.user.findUnique({ where: { id: userId }, select: { experience: true, currentDiamonds: true } })
+        beforeXP = user?.experience ?? 0
+        beforeDiamonds = user?.currentDiamonds ?? 0
+
+        const updated = await tx.user.update({
           where: { id: userId },
           data: {
             experience: { increment: xpReward },
             currentDiamonds: { increment: diamondReward },
             totalDiamonds: { increment: diamondReward },
           },
+          select: { experience: true, currentDiamonds: true },
         })
+        afterXP = updated.experience
+        afterDiamonds = updated.currentDiamonds
 
         await tx.diamondTransaction.create({
           data: {
             userId,
             amount: diamondReward,
             type: "GAME_REWARD",
-            description: `${gameKey} completed - Score: ${baseScore}% | +${xpReward} XP`,
+            description: `${gameKey} completed${isAdvanced ? " (advanced)" : ""} - Score: ${baseScore}% | +${xpReward} XP`,
             relatedId: gs.id,
             relatedType: "game_session",
           },
@@ -180,7 +192,11 @@ export async function POST(req: NextRequest) {
       console.error("Failed to update challenge progress from game session:", e)
     }
 
-    return NextResponse.json({ session: gs, rewards: { xp: xpReward, diamonds: diamondReward } })
+    return NextResponse.json({
+      session: gs,
+      rewards: { xp: xpReward, diamonds: diamondReward },
+      totals: { before: { xp: beforeXP, diamonds: beforeDiamonds }, after: { xp: afterXP, diamonds: afterDiamonds } },
+    })
   } catch (e: any) {
     console.error("/api/games/session POST error:", e)
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 })
