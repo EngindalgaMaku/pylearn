@@ -262,7 +262,8 @@ export default async function Page() {
           hasCourseInstance: {
             "@type": "CourseInstance",
             courseMode: "online",
-            educationalLevel: "Beginner to Intermediate"
+            educationalLevel: "Beginner to Intermediate",
+            courseWorkload: "Self-paced (~3–5 hours per week)"
           },
           learningResourceType: "Interactive Resource",
           teaches: "Python programming fundamentals, data structures, functions, control flow",
