@@ -11,7 +11,7 @@
   --card-foreground: #4b5563;
   --popover: #ffffff;
   --popover-foreground: #4b5563;
-  --primary: #a16207;
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
   --secondary: #dc2626;
   --secondary-foreground: #ffffff;
@@ -49,8 +49,8 @@
   --card-foreground: #f9fafb;
   --popover: #1f2937;
   --popover-foreground: #f9fafb;
-  --primary: #fbbf24;
-  --primary-foreground: #1f2937;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
   --secondary: #ef4444;
   --secondary-foreground: #ffffff;
   --muted: #4b5563;
@@ -118,7 +118,8 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --font-sans: var(--font-open-sans);
   --font-serif: var(--font-montserrat);
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
 }
 
 @layer base {

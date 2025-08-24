@@ -122,6 +122,15 @@ export default function DataExplorationActivity({ activity }: { activity: Activi
   const [showRewardAnimation, setShowRewardAnimation] = useState(false);
   const [hintRevealed, setHintRevealed] = useState<Record<number, number>>({});
   const rawTimeLimit = (raw?.timeLimitSec ?? raw?.timeLimit ?? raw?.settings?.timeLimit) as number | undefined;
+  const numericTolerance = useMemo<number>(() => {
+    const v = (raw?.numericTolerance ?? raw?.settings?.numericTolerance) as number | undefined;
+    return typeof v === "number" && v >= 0 ? v : 0.01; // default 0.01 tolerance (1% or 0.01 abs)
+  }, [raw]);
+  const hintPenalty = useMemo<number>(() => {
+    const v = (raw?.hintPenalty ?? raw?.settings?.hintPenalty) as number | undefined;
+    // fraction per reveal (e.g., 0.25 => 25% deduction of task points per reveal)
+    return typeof v === "number" && v >= 0 ? v : 0.25;
+  }, [raw]);
   const initialTime = useMemo(() => {
     if (typeof rawTimeLimit === "number" && rawTimeLimit > 0) {
       // If likely minutes (small number), convert to seconds
@@ -162,12 +171,36 @@ export default function DataExplorationActivity({ activity }: { activity: Activi
   }, [timeLeft, showResults]);
 
   const handleTaskAnswer = (id: number, val: string) => setAnswers((prev) => ({ ...prev, [id]: val }));
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .trim()
+      .replace(/[\s\u00A0]+/g, " ")
+      .replace(/[.,!?:;(){}\[\]"'`]/g, "")
+      .replace(/\s+/g, " ");
+  const toNumber = (s: string): number | null => {
+    if (!s) return null;
+    const cleaned = s.replace(/[,\s]/g, "");
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  };
+  const equalsSmart = (userRaw: string, targetRaw: string): boolean => {
+    const uNum = toNumber(userRaw);
+    const tNum = toNumber(targetRaw);
+    if (uNum !== null && tNum !== null) {
+      const absDiff = Math.abs(uNum - tNum);
+      const relTol = Math.abs(tNum) * numericTolerance;
+      const absTol = Math.max(0.01, numericTolerance); // ensure small absolute tolerance
+      return absDiff <= Math.max(relTol, absTol);
+    }
+    return norm(userRaw) === norm(targetRaw);
+  };
   const completeTask = (id: number) => {
     const task = tasks.find((t) => t.id === id);
     const userAns = (answers[id] || "").trim().toLowerCase();
     let isCorrect = false;
     if (task?.correctAnswers && task.correctAnswers.length > 0) {
-      isCorrect = task.correctAnswers.includes(userAns);
+      isCorrect = task.correctAnswers.some((t) => equalsSmart(userAns, t));
     } else {
       // If no correct answers provided, consider any non-empty answer as completion but not necessarily correct
       isCorrect = userAns.length > 0;
@@ -181,7 +214,13 @@ export default function DataExplorationActivity({ activity }: { activity: Activi
 
     // Compute earned using correctness
     const total = tasks.reduce((s, t) => s + (t?.points || 0), 0);
-    const earned = tasks.reduce((sum, t) => sum + ((correctMap[t.id] ? t.points : 0) || 0), 0);
+    // Apply hint penalty per task
+    const earned = tasks.reduce((sum, t) => {
+      if (!correctMap[t.id]) return sum;
+      const reveals = hintRevealed[t.id] || 0;
+      const penaltyFactor = Math.max(0, 1 - hintPenalty * reveals);
+      return sum + Math.max(0, (t.points || 0) * penaltyFactor);
+    }, 0);
     const score = total > 0 ? Math.round((earned / total) * 100) : 0;
     const success = score >= 70;
 
