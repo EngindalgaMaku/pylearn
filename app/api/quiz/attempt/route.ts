@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { updateChallengesProgressForEvent } from "@/lib/challengeProgress"
 
 // POST /api/quiz/attempt
 // Body: { quizId: string, answers: number[], order?: number[], timeSpent: number }
@@ -118,6 +119,16 @@ export async function POST(request: Request) {
 
   // Return attempt result and any newly awarded milestones
   const userAfter = await prisma.user.findUnique({ where: { id: userId }, select: { currentDiamonds: true, totalDiamonds: true, experience: true } })
+
+  // Fire-and-forget: update challenge progress for quiz-based requirements
+  try {
+    await updateChallengesProgressForEvent({
+      kind: "quiz_attempt",
+      userId,
+      category: null,
+      correctAnswers,
+    })
+  } catch {}
 
   return NextResponse.json({
     id: created.id,

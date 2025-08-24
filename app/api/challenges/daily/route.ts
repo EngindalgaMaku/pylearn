@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest) {
     const session = (await getServerSession(authOptions as any)) as any
     const userId = (session?.user as any)?.id as string | undefined
 
-    // Games-based daily challenge selection (no DB side-effects)
+    // Games-based daily challenge selection
     // Rotate among available games; default to Syntax Puzzle
     const games = [
       { key: "syntax-puzzle", title: "Syntax Puzzle Daily", description: "Solve 5 syntax puzzles in under 10 minutes", path: "/games/syntax-puzzle", baseXP: 25, baseDiamonds: 15, difficulty: 1 },
@@ -70,6 +70,29 @@ export async function GET(_req: NextRequest) {
           completed,
         }
       }
+    }
+
+    // Persist today's daily to DB if not exists (for admin archive)
+    try {
+      const todayStart = startOfDay()
+      const exists = await prisma.dailyMiniQuiz.findFirst({ where: { date: { gte: todayStart, lte: endOfDay() }, title: pick.title }, select: { id: true } })
+      if (!exists) {
+        await prisma.dailyMiniQuiz.create({
+          data: {
+            date: todayStart,
+            questions: JSON.stringify({ gameKey: pick.key, requirement }),
+            difficulty: pick.difficulty,
+            category: "games",
+            diamondReward: pick.baseDiamonds,
+            experienceReward: pick.baseXP,
+            title: pick.title,
+            isActive: true,
+            description: pick.description,
+          },
+        })
+      }
+    } catch (e) {
+      console.warn("Failed to persist daily mini quiz:", e)
     }
 
     // compute expires

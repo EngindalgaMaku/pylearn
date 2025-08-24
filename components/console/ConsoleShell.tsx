@@ -107,6 +107,22 @@ export default function ConsoleShell({
               <span className="text-base">🎯</span>
               <span className={labelCls}>Activities</span>
             </Link>
+            <Link href="/console/challenges" className={itemCls}>
+              <span className="text-base">🏆</span>
+              <span className={labelCls}>Challenges</span>
+            </Link>
+            <Link href="/console/daily" className={itemCls}>
+              <span className="text-base">📅</span>
+              <span className={labelCls}>Daily Challenges</span>
+            </Link>
+            <Link href="/console/challenges/participation" className={itemCls}>
+              <span className="text-base">📈</span>
+              <span className={labelCls}>Challenge Participation</span>
+            </Link>
+            <Link href="/console/challenges/progress-log" className={itemCls}>
+              <span className="text-base">🕒</span>
+              <span className={labelCls}>Progress Log</span>
+            </Link>
             <Link href="/console/shop" className={itemCls}>
               <span className="text-base">💎</span>
               <span className={labelCls}>Shop</span>

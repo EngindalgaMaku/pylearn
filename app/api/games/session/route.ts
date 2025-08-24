@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { updateChallengesProgressForEvent } from "@/lib/challengeProgress"
 
 export async function POST(req: NextRequest) {
   try {
@@ -74,46 +75,107 @@ export async function POST(req: NextRequest) {
       console.error("Failed to apply game rewards:", e)
     }
 
-    // Best-effort: increment active challenges progress for this user
+    // If there is a Daily Mini Quiz for today matching this game, and the
+    // requirement is satisfied, award its one-time reward and create attempt.
+    // This is independent from the generic game session reward above.
     try {
-      const now = new Date()
-      const activeChallenges = await prisma.weeklyChallenge.findMany({
+      function startOfDay(d = new Date()) {
+        const x = new Date(d)
+        x.setHours(0, 0, 0, 0)
+        return x
+      }
+      function endOfDay(d = new Date()) {
+        const x = new Date(d)
+        x.setHours(23, 59, 59, 999)
+        return x
+      }
+
+      const todayStart = startOfDay()
+      const todayEnd = endOfDay()
+
+      // Find today's daily where questions JSON contains our gameKey
+      const daily = await prisma.dailyMiniQuiz.findFirst({
         where: {
+          date: { gte: todayStart, lte: todayEnd },
           isActive: true,
-          startDate: { lte: now },
-          endDate: { gte: now },
+          // questions is a stringified JSON - use a contains match as a pragmatic filter
+          questions: { contains: `"gameKey":"${gameKey}"` },
         },
-        select: { id: true, targetValue: true },
       })
 
-      if (activeChallenges.length && userId) {
-        await Promise.all(
-          activeChallenges.map(async (ch) => {
-            const existing = await prisma.userChallengeProgress.findUnique({
-              where: { userId_challengeId: { userId, challengeId: ch.id } },
-            })
-            const currentValue = (existing?.currentValue ?? 0) + 1
-            const isCompleted = currentValue >= (ch.targetValue ?? 0)
-            await prisma.userChallengeProgress.upsert({
-              where: { userId_challengeId: { userId, challengeId: ch.id } },
-              create: {
-                userId,
-                challengeId: ch.id,
-                currentValue,
-                isCompleted,
-                completedAt: isCompleted ? new Date() : null,
-                lastProgressAt: new Date(),
-              },
-              update: {
-                currentValue,
-                isCompleted,
-                completedAt: isCompleted ? new Date() : existing?.completedAt ?? null,
-                lastProgressAt: new Date(),
-              },
-            })
+      if (daily) {
+        let req: { target?: number; timeLimitSec?: number } = {}
+        try {
+          const parsed = JSON.parse(daily.questions || "{}")
+          req = parsed?.requirement || {}
+        } catch {}
+
+        const metTarget = (Number(correctCount) || 0) >= (Number(req.target) || 0)
+        const withinTime = (Number(durationSec) || 0) <= (Number(req.timeLimitSec) || Number.MAX_SAFE_INTEGER)
+
+        if (metTarget && withinTime) {
+          const already = await prisma.dailyMiniQuizAttempt.findUnique({
+            where: { userId_quizId: { userId, quizId: daily.id } },
+            select: { id: true },
           })
-        )
+          if (!already) {
+            await prisma.$transaction(async (tx) => {
+              // Create attempt record as a claim log
+              await tx.dailyMiniQuizAttempt.create({
+                data: {
+                  userId,
+                  quizId: daily.id,
+                  answers: JSON.stringify({ fromGameSessionId: gs.id }),
+                  score: Number(baseScore) || 0,
+                  timeSpent: Number(durationSec) || 0,
+                  diamondsEarned: daily.diamondReward || 0,
+                  experienceEarned: daily.experienceReward || 0,
+                },
+              })
+
+              // Increment user's wallet
+              await tx.user.update({
+                where: { id: userId },
+                data: {
+                  currentDiamonds: { increment: daily.diamondReward || 0 },
+                  totalDiamonds: { increment: daily.diamondReward || 0 },
+                  experience: { increment: daily.experienceReward || 0 },
+                },
+              })
+
+              // Log diamond transaction
+              if ((daily.diamondReward || 0) > 0) {
+                await tx.diamondTransaction.create({
+                  data: {
+                    userId,
+                    amount: daily.diamondReward || 0,
+                    type: "DAILY_MINI_QUIZ",
+                    description: `${daily.title} completed | +${daily.experienceReward || 0} XP`,
+                    relatedId: daily.id,
+                    relatedType: "daily_mini_quiz",
+                  },
+                })
+              }
+
+              // Update aggregates on the daily quiz
+              await tx.dailyMiniQuiz.update({
+                where: { id: daily.id },
+                data: {
+                  totalAttempts: { increment: 1 },
+                  totalCorrect: { increment: Number(correctCount) || 0 },
+                },
+              })
+            })
+          }
+        }
       }
+    } catch (e) {
+      console.error("Failed to apply daily mini quiz reward:", e)
+    }
+
+    // Update challenge progress only for game_session type requirements
+    try {
+      await updateChallengesProgressForEvent({ kind: "game_session", userId, gameKey })
     } catch (e) {
       console.error("Failed to update challenge progress from game session:", e)
     }

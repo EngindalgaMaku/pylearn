@@ -9,6 +9,10 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "seed:challenges": "tsx scripts/seeds/challenges.ts",
+    "seed:weekly:2025": "tsx scripts/seeds/challenges_2025_weekly.ts",
+    "seed:featured:2025": "tsx scripts/seeds/featured_2025.ts",
+    "fix:challenges:req": "tsx scripts/fixes/normalize_challenges_requirements.ts",
+    "seed:monthly:2025": "tsx scripts/seeds/monthly_2025.ts",
     "sql:add-bonusxp": "tsx scripts/sql/add-bonusxp.ts"
   },
   "dependencies": {

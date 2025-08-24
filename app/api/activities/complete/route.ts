@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { updateChallengesProgressForEvent } from "@/lib/challengeProgress";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -275,6 +276,17 @@ export async function POST(request: NextRequest) {
 
       return { rewarded, userAfter };
     });
+
+    // Fire-and-forget: update challenge progress according to activity type and category
+    try {
+      const act = await prisma.learningActivity.findUnique({ where: { id: aId }, select: { category: true, activityType: true } })
+      updateChallengesProgressForEvent({
+        kind: "activity_completed",
+        userId,
+        category: act?.category ?? null,
+        activityType: act?.activityType ?? null,
+      }).catch(() => {})
+    } catch {}
 
     return NextResponse.json(
       {
