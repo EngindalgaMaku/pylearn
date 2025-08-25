@@ -24,7 +24,7 @@ export default function DesktopNavigation() {
   };
 
   return (
-    <nav className="hidden md:block fixed top-0 left-0 right-0 bg-gradient-to-r from-card/95 via-card/98 to-card/95 backdrop-blur-md border-b border-border/60 z-40 shadow-sm shadow-slate-200/50">
+    <nav className="hidden md:block fixed top-0 left-0 right-0 bg-gradient-to-r from-white/95 via-white/98 to-white/95 backdrop-blur-md border-b border-gray-200/30 z-40 shadow-lg shadow-gray-200/20">
       <div className="max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 py-3 lg:py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-8 lg:gap-12">

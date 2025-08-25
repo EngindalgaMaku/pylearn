@@ -18,6 +18,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Lightbulb,
 } from "lucide-react";
 
 export default function ConsoleShell({
@@ -206,6 +207,13 @@ export default function ConsoleShell({
             >
               <Diamond className="w-5 h-5 text-yellow-500" />
               <span className={labelCls}>Shop</span>
+            </Link>
+            <Link
+              href="/console/tips"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-orange-50 text-slate-700 hover:text-orange-700 transition-colors"
+            >
+              <Lightbulb className="w-5 h-5 text-orange-500" />
+              <span className={labelCls}>Tips</span>
             </Link>
           </nav>
 

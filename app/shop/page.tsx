@@ -526,25 +526,26 @@ export default function ShopPage() {
           </p>
         </div>
         {/* Diamond Balance */}
-        <Card className="bg-gradient-to-br from-yellow-100/90 via-amber-100/80 to-orange-100/90 border-yellow-300/60 shadow-lg hover:shadow-xl transition-all duration-300">
-          <CardContent className="p-4 md:p-6">
+        <Card className="relative overflow-hidden bg-gradient-to-br from-yellow-500/10 via-amber-500/10 to-orange-500/10 border-yellow-200/30 hover:from-yellow-500/20 hover:via-amber-500/20 hover:to-orange-500/20 hover:shadow-lg transition-all duration-300 group">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-yellow-600/20 via-amber-600/15 to-orange-600/20 opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
+          <CardContent className="relative p-4 md:p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                <div className="w-12 h-12 bg-white/90 border-2 border-yellow-200/50 hover:border-yellow-300/70 rounded-full flex items-center justify-center shadow-sm transition-all duration-300 backdrop-blur-sm">
                   <Sparkles className="w-6 h-6 text-yellow-600" />
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-yellow-800">
+                  <p className="text-lg font-bold text-gray-900">
                     {typeof userDiamonds === "number" ? userDiamonds : "—"} 💎
                   </p>
-                  <p className="text-sm text-yellow-600">Available Diamonds</p>
+                  <p className="text-sm text-gray-600">Available Diamonds</p>
                 </div>
               </div>
               <Link href="/activities">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-yellow-300 text-yellow-700 hover:bg-yellow-50 bg-transparent"
+                  className="bg-white/80 text-gray-700 border-yellow-200/50 hover:bg-white/90"
                 >
                   Earn More
                 </Button>

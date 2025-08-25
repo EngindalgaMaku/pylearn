@@ -643,7 +643,7 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Mobile Brand Header */}
-      <div className="md:hidden sticky top-0 z-30 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
+      <div className="md:hidden sticky top-0 z-30 bg-gradient-to-r from-white/95 via-white/90 to-white/95 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 border-b border-gray-200/50 shadow-sm">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center gap-3">
           <img src="/python.svg" alt="PyLearn logo" className="h-6 w-6" />
           <div className="flex flex-col leading-tight">
@@ -727,27 +727,27 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
             </Card>
 
             {/* Your Weekly Rank (under Daily Challenge) */}
-            <Card className="relative overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border-l-4 border-l-primary/30 hover:border-l-primary group">
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/3 opacity-40 group-hover:opacity-60 transition-opacity duration-300" />
+            <Card className="relative overflow-hidden bg-gradient-to-br from-amber-500/10 via-yellow-500/10 to-orange-500/10 border-amber-200/30 hover:from-amber-500/20 hover:via-yellow-500/20 hover:to-orange-500/20 hover:shadow-lg transition-all duration-300 group">
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-600/20 via-yellow-600/15 to-orange-600/20 opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
               <CardContent className="relative p-4 md:p-5 lg:p-6">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-background/90 border-2 border-primary/30 hover:border-primary/50 flex items-center justify-center shadow-sm transition-all duration-300">
+                    <div className="w-10 h-10 md:w-12 md:h-12 lg:w-14 lg:h-14 rounded-lg bg-white/90 border-2 border-amber-200/50 hover:border-amber-300/70 flex items-center justify-center shadow-sm transition-all duration-300 backdrop-blur-sm">
                       <Trophy
-                        className="h-5 w-5 md:h-6 md:w-6 text-primary hover:scale-110 transition-transform duration-200"
+                        className="h-5 w-5 md:h-6 md:w-6 text-amber-600 hover:scale-110 transition-transform duration-200"
                         aria-hidden="true"
                       />
                     </div>
                     <div>
-                      <p className="font-medium text-sm md:text-base lg:text-lg">
+                      <p className="font-medium text-sm md:text-base lg:text-lg text-gray-900">
                         Your Weekly Rank
                       </p>
                       {rankUser ? (
-                        <p className="text-xs md:text-sm lg:text-base text-muted-foreground">
+                        <p className="text-xs md:text-sm lg:text-base text-gray-600">
                           #{rankUser.rank} • {rankUser.xp} XP this week
                         </p>
                       ) : (
-                        <p className="text-xs md:text-sm lg:text-base text-muted-foreground">
+                        <p className="text-xs md:text-sm lg:text-base text-gray-600">
                           Complete activities to enter the weekly leaderboard
                         </p>
                       )}
@@ -756,8 +756,7 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
                   <Link href="/leaderboard">
                     <Button
                       size="sm"
-                      variant="secondary"
-                      className="md:size-default lg:px-6"
+                      className="md:size-default lg:px-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white border-0"
                     >
                       <Trophy className="w-4 h-4 mr-2" />
                       View Leaderboard
@@ -799,42 +798,48 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
                   " "
                 );
                 return (
-                  <Card className="relative overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 group border hover:border-primary/20">
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/3 via-transparent to-secondary/3 opacity-30 group-hover:opacity-50 transition-opacity duration-300" />
+                  <Card className="relative overflow-hidden bg-gradient-to-br from-indigo-500/10 via-blue-500/10 to-cyan-500/10 border-indigo-200/30 hover:from-indigo-500/20 hover:via-blue-500/20 hover:to-cyan-500/20 hover:shadow-lg transition-all duration-300 group">
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-600/20 via-blue-600/15 to-cyan-600/20 opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
                     <CardContent className="relative p-0">
                       <div className="p-4 md:p-5 lg:p-6">
                         <div className="flex items-center gap-3 lg:gap-4">
-                          <div className="w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 bg-background/90 border-2 border-primary/20 hover:border-primary/40 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-all duration-300 shadow-sm">
+                          <div className="w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 bg-white/90 border-2 border-indigo-200/50 hover:border-indigo-300/70 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-all duration-300 shadow-sm backdrop-blur-sm">
                             <span className="text-xl md:text-2xl lg:text-3xl group-hover:animate-bounce">
                               🎯
                             </span>
                           </div>
                           <div className="min-w-0">
-                            <h3 className="font-medium md:text-lg lg:text-xl truncate">
+                            <h3 className="font-medium md:text-lg lg:text-xl truncate text-gray-900">
                               {act ? act.title : "Explore Learning Activities"}
                             </h3>
-                            <p className="text-sm md:text-base lg:text-lg text-muted-foreground">
+                            <p className="text-sm md:text-base lg:text-lg text-gray-600">
                               {act
                                 ? act.description || actType
                                 : "Jump into a random interactive activity"}
                             </p>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge
+                                variant="secondary"
+                                className="bg-white/80 text-gray-700 border-indigo-200/50 text-xs"
+                              >
                                 {actType}
                               </Badge>
-                              <Badge variant="outline" className="text-xs">
+                              <Badge
+                                variant="outline"
+                                className="bg-white/60 text-gray-700 border-indigo-200/50 text-xs"
+                              >
                                 {actMinutes} min
                               </Badge>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-xs text-gray-600">
                                 +{actXP} XP, +{actDiamonds} 💎
                               </span>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-end border-t border-border/60 bg-card/40 px-4 md:px-6 py-3">
+                      <div className="flex items-center justify-end border-t border-indigo-200/30 bg-white/20 backdrop-blur-sm px-4 md:px-6 py-3">
                         <Link href={actHref} className="w-full sm:w-auto">
-                          <Button className="w-full sm:w-auto md:text-base lg:text-lg">
+                          <Button className="w-full sm:w-auto md:text-base lg:text-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white border-0">
                             <Zap className="w-4 h-4 mr-2" />
                             Start Activity
                           </Button>
@@ -1004,39 +1009,43 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
               <div className="grid grid-cols-1 gap-4">
                 {/* Random Featured Game (stable pick) */}
                 {mounted && featuredPickRef.current && (
-                  <Card className="relative overflow-hidden hover:shadow-md transition-shadow group">
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/3 via-transparent to-secondary/3 opacity-20 group-hover:opacity-40 transition-opacity duration-300" />
+                  <Card className="relative overflow-hidden bg-gradient-to-br from-violet-500/10 via-purple-500/10 to-fuchsia-500/10 border-violet-200/30 hover:from-violet-500/20 hover:via-purple-500/20 hover:to-fuchsia-500/20 hover:shadow-lg transition-all duration-300 group">
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-600/20 via-purple-600/15 to-fuchsia-600/20 opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
                     <CardContent className="relative p-0">
                       <div className="p-4 md:p-6 flex items-center gap-4">
-                        <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-background/90 border-2 border-primary/20 hover:border-primary/40 shadow-sm transition-all duration-300">
+                        <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-white/90 border-2 border-violet-200/50 hover:border-violet-300/70 shadow-sm transition-all duration-300 backdrop-blur-sm">
                           <span className="text-2xl md:text-3xl">
                             {featuredPickRef.current.icon}
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-medium md:text-lg lg:text-xl truncate">
+                          <h3 className="font-medium md:text-lg lg:text-xl truncate text-gray-900">
                             {featuredPickRef.current.title}
                           </h3>
-                          <p className="text-sm md:text-base lg:text-lg text-muted-foreground">
+                          <p className="text-sm md:text-base lg:text-lg text-gray-600">
                             {featuredPickRef.current.description}
                           </p>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             {featuredPickRef.current.badges.map((b, i) => (
-                              <Badge key={i} variant={b.variant}>
+                              <Badge
+                                key={i}
+                                variant={b.variant}
+                                className="bg-white/80 text-gray-700 border-violet-200/50"
+                              >
                                 {b.label}
                               </Badge>
                             ))}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-end border-t border-border/60 bg-card/40 px-4 md:px-6 py-3">
+                      <div className="flex items-center justify-end border-t border-violet-200/30 bg-white/20 backdrop-blur-sm px-4 md:px-6 py-3">
                         <Link
                           href={featuredPickRef.current.href}
                           className="w-full sm:w-auto"
                         >
                           <Button
                             size="sm"
-                            className="w-full sm:w-auto md:text-base"
+                            className="w-full sm:w-auto md:text-base bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white border-0"
                           >
                             <Play className="w-4 h-4 mr-2" />
                             Play
@@ -1048,28 +1057,28 @@ even_squares = [x**2 for x in range(10) if x % 2 == 0]`,
                 )}
 
                 {/* More Games (CTA) */}
-                <Card className="relative overflow-hidden hover:shadow-md transition-shadow group">
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-secondary/3 via-transparent to-accent/3 opacity-20 group-hover:opacity-40 transition-opacity duration-300" />
+                <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border-emerald-200/30 hover:from-emerald-500/20 hover:via-teal-500/20 hover:to-cyan-500/20 hover:shadow-lg transition-all duration-300 group">
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-600/20 via-teal-600/15 to-cyan-600/20 opacity-50 group-hover:opacity-70 transition-opacity duration-300" />
                   <CardContent className="relative p-0">
                     <div className="p-4 md:p-6 flex items-center gap-4">
-                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-background/90 border-2 border-secondary/30 hover:border-secondary/50 shadow-sm transition-all duration-300">
+                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl flex items-center justify-center bg-white/90 border-2 border-emerald-200/50 hover:border-emerald-300/70 shadow-sm transition-all duration-300 backdrop-blur-sm">
                         <span className="text-2xl md:text-3xl">🎮</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium md:text-lg lg:text-xl truncate">
+                        <h3 className="font-medium md:text-lg lg:text-xl truncate text-gray-900">
                           More Games
                         </h3>
-                        <p className="text-sm md:text-base lg:text-lg text-muted-foreground">
+                        <p className="text-sm md:text-base lg:text-lg text-gray-600">
                           Visit the Games page to play fun, interactive
                           challenges.
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-end border-t border-border/60 bg-card/40 px-4 md:px-6 py-3">
+                    <div className="flex items-center justify-end border-t border-emerald-200/30 bg-white/20 backdrop-blur-sm px-4 md:px-6 py-3">
                       <Link href="/games" className="w-full sm:w-auto">
                         <Button
                           size="sm"
-                          className="w-full sm:w-auto md:text-base"
+                          className="w-full sm:w-auto md:text-base bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white border-0"
                         >
                           <Gamepad2 className="w-4 h-4 mr-2" />
                           Go to Games

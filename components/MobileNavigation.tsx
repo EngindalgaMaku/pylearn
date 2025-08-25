@@ -24,7 +24,7 @@ export default function MobileNavigation() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-card via-card/95 to-card/90 backdrop-blur-md border-t border-border/60 md:hidden shadow-lg shadow-slate-200/20">
+    <nav className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white/95 via-white/98 to-white/90 backdrop-blur-md border-t border-gray-200/30 md:hidden shadow-lg shadow-gray-200/20">
       <div className="max-w-md mx-auto px-2 py-3">
         <div className="flex justify-around">
           {navItems.map((item) => (

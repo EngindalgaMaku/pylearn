@@ -105,8 +105,8 @@ export default function LeaderboardClient({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-slate-50/30 to-purple-50/30 pb-20">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-card via-purple-50/80 to-blue-50/80 border-b border-border/60 px-4 py-6 backdrop-blur-sm">
+      {/* Mobile Header */}
+      <header className="md:hidden bg-gradient-to-r from-card via-purple-50/80 to-blue-50/80 border-b border-border/60 px-4 py-6 backdrop-blur-sm">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-3 mb-2">
             <Link href="/">
