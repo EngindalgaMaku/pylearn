@@ -1,16 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, CheckCircle, XCircle, Clock } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
 import { useSpeedTimer } from "@/hooks/useSpeedTimer"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import RewardDialog from "@/components/games/RewardDialog"
+import { useGameRewards } from "@/hooks/useGameRewards"
 
 // Simple data types recognition quiz
 
@@ -66,10 +65,8 @@ function generatePool(): DTQ[] {
 function shuffle<T>(a: T[]): T[] { const c = a.slice(); for (let i = c.length - 1; i > 0; i--) { const j = Math.floor(Math.random()* (i+1)); [c[i], c[j]] = [c[j], c[i]] } return c }
 
 export default function DataTypesGame() {
-  const { data: session, update } = useSession()
-  const { toast } = useToast()
   const pool = useMemo(() => generatePool(), [])
-  const questions = useMemo(() => shuffle(pool).slice(0, 6).map(q => ({...q, options: shuffle(q.options)})), [pool])
+  const questions = useMemo(() => shuffle(pool).slice(0, 10).map(q => ({...q, options: shuffle(q.options)})), [pool])
   const [idx, setIdx] = useState(0)
   const [score, setScore] = useState(0)
   const [selected, setSelected] = useState<string | null>(null)
@@ -79,10 +76,7 @@ export default function DataTypesGame() {
   const QUESTION_TIME = 12
   const runStartRef = useRef<number | null>(null)
   const postedRef = useRef(false)
-  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
-  const [showReward, setShowReward] = useState(false)
-  const [prevXP, setPrevXP] = useState<number | null>(null)
-  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
+  const { reward, showReward, setShowReward, prevXP, prevDiamonds, postSession } = useGameRewards()
   const { timeLeft, bonusXP, lastBonus, markQuestionStart, registerAnswerCorrect, resetBonuses } = useSpeedTimer(
     QUESTION_TIME,
     started,
@@ -127,6 +121,16 @@ export default function DataTypesGame() {
     }
   }
 
+  // Auto-advance after showing result briefly
+  useEffect(() => {
+    if (!started || completed) return
+    if (!showResult) return
+    const t = setTimeout(() => {
+      next()
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [showResult, started, completed])
+
   const restart = () => {
     setStarted(false)
     setIdx(0)
@@ -146,33 +150,10 @@ export default function DataTypesGame() {
       postedRef.current = true
       const startedAt = runStartRef.current ?? Date.now()
       const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
-      try {
-        const res = await fetch("/api/games/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ gameKey: "data-types", score, correctCount: score, durationSec, bonusXP }),
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json().catch(() => ({}))
-        const xp = data?.rewards?.xp ?? 0
-        const diamonds = data?.rewards?.diamonds ?? 0
-        setReward({ xp, diamonds })
-        try {
-          const curXP = (session?.user as any)?.experience ?? 0
-          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
-          setPrevXP(curXP)
-          setPrevDiamonds(curDiamonds)
-          await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
-          setShowReward(true)
-        } catch {
-          setShowReward(true)
-        }
-      } catch (e) {
-        toast({ title: "Session save failed", description: "Could not record your Data Types session.", variant: "destructive" })
-      }
+      await postSession({ gameKey: "data-types", score, correctCount: score, durationSec, bonusXP })
     }
     post()
-  }, [completed, score, bonusXP, session, update, toast])
+  }, [completed, score, bonusXP, postSession])
 
   if (!started) {
     return (
@@ -191,7 +172,7 @@ export default function DataTypesGame() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex gap-2 justify-center">
-                <Badge variant="secondary">6 Questions</Badge>
+                <Badge variant="secondary">10 Questions</Badge>
                 <Badge variant="outline">Up to +10 XP + 💎</Badge>
               </div>
               <Button onClick={start} className="w-full">Start</Button>
@@ -234,39 +215,15 @@ export default function DataTypesGame() {
               </div>
             </CardContent>
           </Card>
-          {/* Rewards Popup */}
-          <Dialog open={showReward} onOpenChange={setShowReward}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
-                <DialogDescription className="text-center">Keep playing to earn more XP and diamonds.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="rounded-lg border p-3 bg-primary/5 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2"><span className="text-2xl">⭐</span><span className="font-medium">XP</span></div>
-                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div></div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.xp ?? 0}</span></div>
-                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevXP ?? (session?.user as any)?.experience ?? 0) + (reward?.xp ?? 0)}</span></div>
-                  </div>
-                  <div className="rounded-lg border p-3 bg-secondary/10 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="font-medium">Diamonds</span></div>
-                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div></div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.diamonds ?? 0}</span></div>
-                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (reward?.diamonds ?? 0)}</span></div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" onClick={() => setShowReward(false)}>Keep Playing ▶️</Button>
-                  <Link href="/games" className="flex-1"><Button variant="outline" className="w-full">More Games</Button></Link>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <RewardDialog
+            open={showReward}
+            onOpenChange={setShowReward}
+            prevXP={prevXP}
+            prevDiamonds={prevDiamonds}
+            reward={reward}
+            primaryLabel="Keep Playing ▶️"
+            onPrimary={() => setShowReward(false)}
+          />
         </main>
       </div>
     )
@@ -307,7 +264,6 @@ export default function DataTypesGame() {
                 ) : (
                   <p className="text-destructive font-medium inline-flex items-center gap-2 justify-center"><XCircle className="w-4 h-4" /> {selected === "__timeout__" ? "Time's up!" : "Incorrect"}</p>
                 )}
-                <Button onClick={next} className="mt-4 w-full">{idx === questions.length - 1 ? "Finish" : "Next"}</Button>
               </div>
             )}
           </CardContent>

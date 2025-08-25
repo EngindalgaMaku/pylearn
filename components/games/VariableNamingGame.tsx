@@ -1,15 +1,14 @@
 "use client"
 
 import { useMemo, useState, useEffect, useRef } from "react"
-import { useSession } from "next-auth/react"
-import { useToast } from "@/hooks/use-toast"
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, CheckCircle, XCircle, Clock } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import RewardDialog from "@/components/games/RewardDialog"
+import { useGameRewards } from "@/hooks/useGameRewards"
 import GameSEOSection from "@/components/games/GameSEOSection"
 
 const PY_KEYWORDS = new Set([
@@ -65,12 +64,7 @@ export default function VariableNamingGame() {
   const [started, setStarted] = useState(false)
   const runStartRef = useRef<number | null>(null)
   const postedRef = useRef(false)
-  const { toast } = useToast()
-  const { data: session, update } = useSession()
-  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
-  const [showReward, setShowReward] = useState(false)
-  const [prevXP, setPrevXP] = useState<number | null>(null)
-  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
+  const { reward, showReward, setShowReward, prevXP, prevDiamonds, postSession } = useGameRewards()
 
   useEffect(() => {
     if (!started || gameOver) return
@@ -84,6 +78,15 @@ export default function VariableNamingGame() {
       return () => clearTimeout(t)
     }
   }, [timeLeft, started, gameOver, answered])
+
+  // After the user answers (or timeout marks wrong), briefly show feedback then auto-advance
+  useEffect(() => {
+    if (answered === null || gameOver === true) return
+    const t = setTimeout(() => {
+      next()
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [answered, gameOver])
 
   const round = rounds[current]
   const progressPct = Math.round(((current + 1) / rounds.length) * 100)
@@ -129,62 +132,15 @@ export default function VariableNamingGame() {
 
   // Post session when game over
   useEffect(() => {
-    const postSession = async () => {
+    const run = async () => {
       if (!gameOver || !started || postedRef.current) return
       postedRef.current = true
-      // Open modal immediately with best-known current totals; server values will replace shortly
-      setPrevXP((session?.user as any)?.experience ?? 0)
-      setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
-      setShowReward(true)
       const startedAt = runStartRef.current ?? Date.now()
       const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
-      try {
-        const res = await fetch("/api/games/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            gameKey: "variable-naming",
-            score,
-            correctCount: score,
-            durationSec,
-          }),
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json().catch(() => ({}))
-        const xp = data?.rewards?.xp ?? 0
-        const diamonds = data?.rewards?.diamonds ?? 0
-        const beforeXP = data?.totals?.before?.xp
-        const beforeDiamonds = data?.totals?.before?.diamonds
-        const afterXP = data?.totals?.after?.xp
-        const afterDiamonds = data?.totals?.after?.diamonds
-        setReward({ xp, diamonds })
-        if (typeof beforeXP === "number") setPrevXP(beforeXP); else setPrevXP((session?.user as any)?.experience ?? 0)
-        if (typeof beforeDiamonds === "number") setPrevDiamonds(beforeDiamonds); else setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
-        try {
-          if (typeof afterXP === "number" || typeof afterDiamonds === "number") {
-            await update?.({
-              experience: typeof afterXP === "number" ? afterXP : ((session?.user as any)?.experience ?? 0) + xp,
-              currentDiamonds: typeof afterDiamonds === "number" ? afterDiamonds : ((session?.user as any)?.currentDiamonds ?? 0) + diamonds,
-            })
-          } else {
-            const curXP = (session?.user as any)?.experience ?? 0
-            const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
-            await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
-          }
-        } catch {
-          // keep modal open even if update fails
-        }
-      } catch (e) {
-        console.error("Failed to post game session (variable-naming)", e)
-        toast({
-          title: "Session save failed",
-          description: "We couldn't record your game session. Your progress may not update.",
-          variant: "destructive",
-        })
-      }
+      await postSession({ gameKey: "variable-naming", score, correctCount: score, durationSec })
     }
-    postSession()
-  }, [gameOver, started, score, session, update, toast])
+    run()
+  }, [gameOver, started, score, postSession])
 
   if (!started) {
     return (
@@ -240,39 +196,15 @@ export default function VariableNamingGame() {
               </Button>
             </CardContent>
           </Card>
-          {/* Rewards Popup */}
-          <Dialog open={showReward} onOpenChange={setShowReward}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
-                <DialogDescription className="text-center">Keep playing to earn more XP and diamonds.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="rounded-lg border p-3 bg-primary/5 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2"><span className="text-2xl">⭐</span><span className="font-medium">XP</span></div>
-                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div></div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.xp ?? 0}</span></div>
-                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevXP ?? (session?.user as any)?.experience ?? 0) + (reward?.xp ?? 0)}</span></div>
-                  </div>
-                  <div className="rounded-lg border p-3 bg-secondary/10 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="font-medium">Diamonds</span></div>
-                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div></div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.diamonds ?? 0}</span></div>
-                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (reward?.diamonds ?? 0)}</span></div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" onClick={() => setShowReward(false)}>Keep Playing ▶️</Button>
-                  <Link href="/games" className="flex-1"><Button variant="outline" className="w-full">More Games</Button></Link>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <RewardDialog
+            open={showReward}
+            onOpenChange={setShowReward}
+            prevXP={prevXP}
+            prevDiamonds={prevDiamonds}
+            reward={reward}
+            primaryLabel="Keep Playing ▶️"
+            onPrimary={() => setShowReward(false)}
+          />
         </main>
       </div>
     )
@@ -289,47 +221,46 @@ export default function VariableNamingGame() {
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             </Link>
-            <h1 className="text-xl font-bold font-[family-name:var(--font-work-sans)]">Case Closed!</h1>
+            <h1 className="text-xl font-bold font-[family-name:var(--font-work-sans)]">Variable Naming</h1>
           </div>
         </header>
-
-        <main className="max-w-md mx-auto px-4 py-6">
-          <Card className="text-center">
+        <main className="max-w-md mx-auto px-4 py-6 space-y-6">
+          <Card>
             <CardHeader>
-              <div className="w-20 h-20 mx-auto bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                <span className="text-4xl">{pct >= 80 ? "🏆" : pct >= 60 ? "🎉" : "📚"}</span>
-              </div>
-              <CardTitle className="font-[family-name:var(--font-work-sans)]">
-                {pct >= 80 ? "Master Sleuth!" : pct >= 60 ? "Great Detective!" : "Training Continues!"}
+              <CardTitle className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary/10">🎉</span>
+                Great Detective!
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-1">
-                <div className="text-3xl font-bold text-primary">
-                  {score}/{rounds.length}
-                </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-primary">{score}/{rounds.length}</div>
                 <div className="text-sm text-muted-foreground">Correct Identifiers Found</div>
               </div>
-
-              <Badge variant="secondary" className="text-sm px-3 py-1">
-                +{score * 5} XP Earned
-              </Badge>
-
-              <div className="flex gap-3">
-                <Button onClick={restart} variant="outline" className="flex-1 bg-transparent">
-                  Play Again
-                </Button>
-                <Link href="/games" className="flex-1">
-                  <Button className="w-full">More Games</Button>
-                </Link>
+              <div className="flex justify-center">
+                <Badge variant="secondary" className="text-sm px-3 py-1">+{score * 5} XP Earned</Badge>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <Button onClick={restart} variant="destructive">Play Again</Button>
+                <Link href="/games"><Button variant="default">More Games</Button></Link>
               </div>
             </CardContent>
           </Card>
+          <RewardDialog
+            open={showReward}
+            onOpenChange={setShowReward}
+            prevXP={prevXP}
+            prevDiamonds={prevDiamonds}
+            reward={reward}
+            primaryLabel="Keep Playing ▶️"
+            onPrimary={() => setShowReward(false)}
+          />
         </main>
       </div>
     )
   }
 
+  // Playing screen
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -406,10 +337,6 @@ export default function VariableNamingGame() {
                     <li>No spaces or hyphens; avoid Python keywords</li>
                   </ul>
                 </div>
-
-                <Button onClick={next} className="w-full">
-                  {current === rounds.length - 1 ? "Finish" : "Next"}
-                </Button>
               </div>
             )}
           </CardContent>

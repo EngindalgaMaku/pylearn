@@ -42,7 +42,13 @@ export default function AdminConsoleLink({
 
   return (
     <Link href="/console">
-      <Button size={size} className={`${base} ${styles}`}>
+      <Button
+        size={size}
+        className={`${base} ${styles} px-2 py-2 lg:px-2 lg:py-2 rounded-md`}
+        aria-label="Admin Console"
+        title="Admin Console"
+      >
+        {/* Lock icon (Heroicons lock-closed) */}
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -50,10 +56,13 @@ export default function AdminConsoleLink({
           className="h-4 w-4"
           aria-hidden="true"
         >
-          <path d="M12 2.25c-.41 0-.82.093-1.193.278L6.12 4.38A2.25 2.25 0 0 0 4.875 6.4c0 5.185 3.068 9.88 7.81 11.875a.75.75 0 0 0 .63 0c4.742-1.996 7.81-6.69 7.81-11.875a2.25 2.25 0 0 0-1.245-2.02l-4.687-1.853A2.25 2.25 0 0 0 12 2.25z" />
-          <path d="M10.28 12.03a.75.75 0 0 1 1.06 0l3.19-3.19a.75.75 0 1 1 1.06 1.06l-3.72 3.72a.75.75 0 0 1-1.06 0l-1.72-1.72a.75.75 0 1 1 1.06-1.06l1.19 1.19z" />
+          <path
+            fillRule="evenodd"
+            d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3h-.75A2.25 2.25 0 003.75 12v6A2.25 2.25 0 006 20.25h12A2.25 2.25 0 0020.25 18v-6A2.25 2.25 0 0018 9.75h-.75v-3A5.25 5.25 0 0012 1.5zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z"
+            clipRule="evenodd"
+          />
         </svg>
-        <span>Console</span>
+        <span className="sr-only">Console</span>
       </Button>
     </Link>
   );

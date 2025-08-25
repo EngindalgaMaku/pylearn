@@ -1,43 +1,117 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
-import { useToast } from "@/hooks/use-toast"
+import RewardDialog from "@/components/games/RewardDialog"
+import { useGameRewards } from "@/hooks/useGameRewards"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, GripVertical } from "lucide-react"
 import Link from "next/link"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import GameSEOSection from "@/components/games/GameSEOSection"
 
-const puzzles = [
-  {
-    id: 1,
-    title: "Print Statement",
-    description: "Arrange the code to print 'Hello Python'",
-    blocks: ["print(", "'Hello Python'", ")"],
-    correctOrder: [0, 1, 2],
-  },
-  {
-    id: 2,
-    title: "Variable Assignment",
-    description: "Create a variable named 'age' with value 25",
-    blocks: ["age", "=", "25"],
-    correctOrder: [0, 1, 2],
-  },
-  {
-    id: 3,
-    title: "If Statement",
-    description: "Complete the if statement structure",
-    blocks: ["if", "x > 5", ":", "print('Greater')"],
-    correctOrder: [0, 1, 2, 3],
-  },
-]
+type Puzzle = {
+  id: number
+  title: string
+  description: string
+  blocks: string[]
+  correctOrder: number[]
+}
+
+const shuffle = <T,>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5)
+
+const generatePuzzlePool = (): Puzzle[] => {
+  const pool: Puzzle[] = []
+  let id = 1
+
+  // 1) Print statements (20)
+  for (let i = 1; i <= 20; i++) {
+    pool.push({
+      id: id++,
+      title: `Print Message ${i}`,
+      description: `Print a simple message ${i}`,
+      blocks: ["print(", `'Message ${i}'`, ")"],
+      correctOrder: [0, 1, 2],
+    })
+  }
+
+  // 2) Variable assignments (10)
+  for (let i = 1; i <= 10; i++) {
+    pool.push({
+      id: id++,
+      title: `Assign Variable v${i}`,
+      description: `Assign value ${i} to variable v${i}`,
+      blocks: [
+        `v${i}`,
+        "=",
+        `${i}`,
+      ],
+      correctOrder: [0, 1, 2],
+    })
+  }
+
+  // 3) If statements (5)
+  for (let i = 1; i <= 5; i++) {
+    pool.push({
+      id: id++,
+      title: `If Greater Than ${i * 2}`,
+      description: `Check if x is greater than ${i * 2}`,
+      blocks: ["if", `x > ${i * 2}`, ":", `print('Greater than ${i * 2}')`],
+      correctOrder: [0, 1, 2, 3],
+    })
+  }
+
+  // 4) For loops (5)
+  for (let i = 2; i <= 6; i++) {
+    pool.push({
+      id: id++,
+      title: `For Loop ${i}`,
+      description: `Loop ${i} times and print i`,
+      blocks: ["for i in range(", `${i}`, "):", "print(i)"],
+      correctOrder: [0, 1, 2, 3],
+    })
+  }
+
+  // 5) Function defs (5)
+  const fnNames = ["greet", "add", "hello", "square", "welcome"]
+  for (const name of fnNames) {
+    pool.push({
+      id: id++,
+      title: `Function ${name}`,
+      description: `Define ${name} function with a simple body`,
+      blocks: [`def ${name}():`, name === "add" ? "return 1 + 1" : "print('Hi')"],
+      correctOrder: [0, 1],
+    })
+  }
+
+  // 6) List/Dict creations (5)
+  pool.push(
+    { id: id++, title: "Create List", description: "Create a list with three numbers", blocks: ["nums", "=", "[1, 2, 3]"], correctOrder: [0,1,2] },
+    { id: id++, title: "Create Dict", description: "Create a dict with a key", blocks: ["user", "=", "{ 'name': 'Ada' }"], correctOrder: [0,1,2] },
+    { id: id++, title: "Append to List", description: "Append item to list", blocks: ["nums", ".append(", "4", ")"], correctOrder: [0,1,2,3] },
+    { id: id++, title: "String Format", description: "Use f-string to greet", blocks: ["name", "=", "'Bob'"], correctOrder: [0,1,2] },
+    { id: id++, title: "While Loop", description: "Basic while loop skeleton", blocks: ["while", "x < 5", ":", "x += 1"], correctOrder: [0,1,2,3] },
+  )
+
+  // Ensure at least 50
+  while (pool.length < 50) {
+    const n = pool.length + 1
+    pool.push({
+      id: id++,
+      title: `Extra Print ${n}`,
+      description: `Another simple print ${n}`,
+      blocks: ["print(", `'Extra ${n}'`, ")"],
+      correctOrder: [0,1,2],
+    })
+  }
+
+  return pool
+}
 
 export default function SyntaxPuzzleGame() {
-  const { data: session, update } = useSession()
+  const { update } = useSession()
   const [currentPuzzle, setCurrentPuzzle] = useState(0)
   const [userOrder, setUserOrder] = useState<number[]>([])
   const [gameStarted, setGameStarted] = useState(false)
@@ -46,19 +120,25 @@ export default function SyntaxPuzzleGame() {
   const [gameCompleted, setGameCompleted] = useState(false)
   const runStartRef = useRef<number | null>(null)
   const postedRef = useRef(false)
-  const { toast } = useToast()
-  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
-  const [showReward, setShowReward] = useState(false)
-  const [prevXP, setPrevXP] = useState<number | null>(null)
-  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
+  const { reward, showReward, setShowReward, prevXP, prevDiamonds, postSession } = useGameRewards()
+  const pool = useMemo(generatePuzzlePool, [])
+  const [puzzles, setPuzzles] = useState<Puzzle[]>([])
 
-  const puzzle = puzzles[currentPuzzle]
+  const puzzle = puzzles[currentPuzzle]!
 
   const startGame = () => {
+    // Select 5 random puzzles for this session
+    const selected = shuffle(pool).slice(0, 5)
+    setPuzzles(selected)
     setGameStarted(true)
-    // Shuffle the blocks for the first puzzle
-    const shuffled = [...Array(puzzle.blocks.length).keys()].sort(() => Math.random() - 0.5)
+    // Prepare first puzzle ordering
+    const first = selected[0]
+    const shuffled = [...Array(first.blocks.length).keys()].sort(() => Math.random() - 0.5)
     setUserOrder(shuffled)
+    setCurrentPuzzle(0)
+    setShowResult(false)
+    setScore(0)
+    setGameCompleted(false)
     runStartRef.current = Date.now()
     postedRef.current = false
   }
@@ -83,8 +163,9 @@ export default function SyntaxPuzzleGame() {
 
   const nextPuzzle = () => {
     if (currentPuzzle < puzzles.length - 1) {
-      setCurrentPuzzle(currentPuzzle + 1)
-      const nextPuzzle = puzzles[currentPuzzle + 1]
+      const nextIndex = currentPuzzle + 1
+      setCurrentPuzzle(nextIndex)
+      const nextPuzzle = puzzles[nextIndex]
       const shuffled = [...Array(nextPuzzle.blocks.length).keys()].sort(() => Math.random() - 0.5)
       setUserOrder(shuffled)
       setShowResult(false)
@@ -94,74 +175,35 @@ export default function SyntaxPuzzleGame() {
   }
 
   const restartGame = () => {
+    // New session with new random 5
+    const selected = shuffle(pool).slice(0, 5)
+    setPuzzles(selected)
     setCurrentPuzzle(0)
-    setUserOrder([])
-    setGameStarted(false)
+    const first = selected[0]
+    const shuffled = [...Array(first.blocks.length).keys()].sort(() => Math.random() - 0.5)
+    setUserOrder(shuffled)
+    setGameStarted(true)
     setShowResult(false)
     setScore(0)
     setGameCompleted(false)
-    runStartRef.current = null
+    runStartRef.current = Date.now()
     postedRef.current = false
   }
 
   // Post a session when game completed
   useEffect(() => {
-    const postSession = async () => {
+    const doPost = async () => {
       if (!gameCompleted || postedRef.current) return
       postedRef.current = true
-      // Open modal immediately with best-known current totals; server values will replace shortly
-      setPrevXP((session?.user as any)?.experience ?? 0)
-      setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
-      setShowReward(true)
       const startedAt = runStartRef.current ?? Date.now()
       const durationSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      await postSession({ gameKey: "syntax-puzzle", score, correctCount: score, durationSec })
       try {
-        const res = await fetch("/api/games/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            gameKey: "syntax-puzzle",
-            score,
-            correctCount: score,
-            durationSec,
-          }),
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json().catch(() => ({}))
-        const xp = data?.rewards?.xp ?? 0
-        const diamonds = data?.rewards?.diamonds ?? 0
-        const beforeXP = data?.totals?.before?.xp
-        const beforeDiamonds = data?.totals?.before?.diamonds
-        const afterXP = data?.totals?.after?.xp
-        const afterDiamonds = data?.totals?.after?.diamonds
-        setReward({ xp, diamonds })
-        if (typeof beforeXP === "number") setPrevXP(beforeXP); else setPrevXP((session?.user as any)?.experience ?? 0)
-        if (typeof beforeDiamonds === "number") setPrevDiamonds(beforeDiamonds); else setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
-        try {
-          if (typeof afterXP === "number" || typeof afterDiamonds === "number") {
-            await update?.({
-              experience: typeof afterXP === "number" ? afterXP : ((session?.user as any)?.experience ?? 0) + xp,
-              currentDiamonds: typeof afterDiamonds === "number" ? afterDiamonds : ((session?.user as any)?.currentDiamonds ?? 0) + diamonds,
-            })
-          } else {
-            const curXP = (session?.user as any)?.experience ?? 0
-            const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
-            await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
-          }
-        } catch {
-          // keep modal open even if update fails
-        }
-      } catch (e) {
-        console.error("Failed to post game session (syntax-puzzle)", e)
-        toast({
-          title: "Session save failed",
-          description: "We couldn't record your puzzle session. Your progress may not update.",
-          variant: "destructive",
-        })
-      }
+        await update?.({})
+      } catch {}
     }
-    postSession()
-  }, [gameCompleted, score, session, update, toast])
+    doPost()
+  }, [gameCompleted, score, postSession, update])
 
   if (!gameStarted) {
     return (
@@ -196,8 +238,8 @@ export default function SyntaxPuzzleGame() {
               </div>
 
               <div className="flex gap-2 justify-center">
-                <Badge variant="secondary">{puzzles.length} Puzzles</Badge>
-                <Badge variant="outline">Up to +10 XP + 💎</Badge>
+                <Badge variant="secondary">{5} Puzzles</Badge>
+                <Badge variant="outline">Up to +5 XP + 💎</Badge>
               </div>
 
               <GameSEOSection
@@ -217,38 +259,14 @@ export default function SyntaxPuzzleGame() {
             </CardContent>
           </Card>
           {/* Rewards Popup */}
-          <Dialog open={showReward} onOpenChange={setShowReward}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
-                <DialogDescription className="text-center">Keep playing to earn more XP and diamonds.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="rounded-lg border p-3 bg-primary/5 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2"><span className="text-2xl">⭐</span><span className="font-medium">XP</span></div>
-                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div></div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.xp ?? 0}</span></div>
-                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevXP ?? (session?.user as any)?.experience ?? 0) + (reward?.xp ?? 0)}</span></div>
-                  </div>
-                  <div className="rounded-lg border p-3 bg-secondary/10 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="font-medium">Diamonds</span></div>
-                      <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div></div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.diamonds ?? 0}</span></div>
-                    <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (reward?.diamonds ?? 0)}</span></div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1" onClick={() => setShowReward(false)}>Keep Playing ▶️</Button>
-                  <Link href="/games" className="flex-1"><Button variant="outline" className="w-full">More Games</Button></Link>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <RewardDialog
+            open={showReward}
+            onOpenChange={setShowReward}
+            prevXP={prevXP}
+            prevDiamonds={prevDiamonds}
+            reward={reward}
+            primaryLabel="Keep Playing ▶️"
+          />
         </main>
       </div>
     )
@@ -303,6 +321,15 @@ export default function SyntaxPuzzleGame() {
               </div>
             </CardContent>
           </Card>
+          {/* Rewards Popup (also rendered on completion screen) */}
+          <RewardDialog
+            open={showReward}
+            onOpenChange={setShowReward}
+            prevXP={prevXP}
+            prevDiamonds={prevDiamonds}
+            reward={reward}
+            primaryLabel="Close"
+          />
         </main>
       </div>
     )
@@ -397,7 +424,7 @@ export default function SyntaxPuzzleGame() {
                 {isCorrect && (
                   <div className="bg-primary/10 p-3 rounded-lg">
                     <code className="font-mono text-sm">
-                      {puzzle.correctOrder.map((i) => puzzle.blocks[i]).join(" ")}
+                      {puzzle.correctOrder.map((i: number) => puzzle.blocks[i]).join(" ")}
                     </code>
                   </div>
                 )}

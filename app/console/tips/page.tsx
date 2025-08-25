@@ -74,9 +74,15 @@ export default function TipsConsolePage() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTip, setEditingTip] = useState<PythonTip | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deletingTip, setDeletingTip] = useState<PythonTip | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterActive, setFilterActive] = useState<string>("all");
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   // Form state
   const [formData, setFormData] = useState({
@@ -89,11 +95,15 @@ export default function TipsConsolePage() {
     isActive: true,
   });
 
+  // Pagination calculations will be computed after filteredTips is defined
+
   useEffect(() => {
     loadTips();
   }, []);
 
   useEffect(() => {
+    // reset to first page when filters/search change
+    setPage(1);
     loadTips();
   }, [searchTerm, filterCategory, filterActive]);
 
@@ -213,8 +223,6 @@ export default function TipsConsolePage() {
   };
 
   const deleteTip = async (tip: PythonTip) => {
-    if (!confirm("Are you sure you want to delete this tip?")) return;
-
     try {
       const response = await fetch(`/api/python-tips/${tip.id}`, {
         method: "DELETE",
@@ -225,6 +233,8 @@ export default function TipsConsolePage() {
           title: "Success",
           description: "Tip deleted successfully",
         });
+        setIsDeleteOpen(false);
+        setDeletingTip(null);
         loadTips();
       } else {
         throw new Error("Failed to delete tip");
@@ -251,6 +261,14 @@ export default function TipsConsolePage() {
 
     return matchesSearch && matchesCategory && matchesActive;
   });
+
+  // Pagination calculations (after filteredTips is available)
+  const totalItems = filteredTips.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(totalItems, startIndex + pageSize);
+  const paginatedTips: PythonTip[] = filteredTips.slice(startIndex, endIndex);
 
   return (
     <div className="space-y-6">
@@ -395,7 +413,7 @@ export default function TipsConsolePage() {
             </CardContent>
           </Card>
         ) : (
-          filteredTips.map((tip) => (
+          paginatedTips.map((tip) => (
             <Card
               key={tip.id}
               className={`relative overflow-hidden ${
@@ -422,8 +440,10 @@ export default function TipsConsolePage() {
                         +{tip.xpReward} XP
                       </Badge>
                     </div>
-                    <CardDescription className="text-sm line-clamp-2">
-                      {tip.content}
+                    <CardDescription className="text-sm">
+                      <div className="max-h-32 overflow-y-auto pr-1 whitespace-pre-wrap">
+                        {tip.content}
+                      </div>
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
@@ -442,6 +462,51 @@ export default function TipsConsolePage() {
                       ) : (
                         <Eye className="w-4 h-4" />
                       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={(open) => {
+        setIsDeleteOpen(open);
+        if (!open) {
+          setDeletingTip(null);
+          setDeleteConfirmText("");
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Tip</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the
+              tip{deletingTip ? ` "${deletingTip.title}"` : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Please type <span className="font-semibold text-red-600">DELETE</span>
+              {" "}to confirm.
+            </p>
+            <Input
+              autoFocus
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="Type DELETE"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsDeleteOpen(false);
+              setDeletingTip(null);
+              setDeleteConfirmText("");
+            }}>Cancel</Button>
+            <Button variant="destructive" disabled={deleteConfirmText !== "DELETE"} onClick={() => {
+              if (deletingTip) {
+                deleteTip(deletingTip);
+              } else {
+                setIsDeleteOpen(false);
+              }
+            }}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
                     </Button>
                     <Button
                       variant="ghost"
@@ -454,7 +519,10 @@ export default function TipsConsolePage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteTip(tip)}
+                      onClick={() => {
+                        setDeletingTip(tip);
+                        setIsDeleteOpen(true);
+                      }}
                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -471,7 +539,7 @@ export default function TipsConsolePage() {
                         Code Example
                       </span>
                     </div>
-                    <pre className="text-sm text-gray-100 overflow-x-auto">
+                    <pre className="text-sm text-gray-100 overflow-x-auto max-h-48 overflow-y-auto">
                       <code>{tip.codeExample}</code>
                     </pre>
                   </div>
@@ -481,6 +549,37 @@ export default function TipsConsolePage() {
           ))
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {filteredTips.length > 0 && (
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <p className="text-sm text-muted-foreground">
+            Showing {Math.min(totalItems, startIndex + 1)}-
+            {Math.min(totalItems, endIndex)} of {totalItems}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </Button>
+            <span className="text-sm">
+              Page {currentPage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

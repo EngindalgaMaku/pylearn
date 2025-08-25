@@ -26,6 +26,17 @@ type Game = {
 
 const GAMES: Game[] = [
   {
+    id: "pythonug",
+    title: "Pythonüg",
+    description: "Earn an Anime Card on completion ✨ — Indentation Fixer!",
+    difficulty: "Advanced",
+    icon: "🐍",
+    timeEstimate: "4 min",
+    xpReward: 10,
+    diamondReward: 2,
+    keywords: ["python", "fun", "learning"],
+  },
+  {
     id: "code-match",
     title: "Code Match",
     description:
@@ -104,6 +115,7 @@ const GAMES: Game[] = [
     diamondReward: 2,
     keywords: ["memory", "matching", "terms", "definitions"],
   },
+  
 ];
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -266,13 +278,21 @@ export default async function GamesPage() {
                 "from-indigo-600/15 via-blue-600/10 to-cyan-600/15",
               ];
 
+              const gi = index % gradients.length;
               return (
                 <Card
                   key={game.id}
-                  className={`${gradients[index]} hover:shadow-lg transition-all duration-300 hover:-translate-y-1 group`}
+                  className={`${gradients[gi]} hover:shadow-lg transition-all duration-300 hover:-translate-y-1 group`}
                 >
+                  {game.id === "pythonug" && (
+                    <div className="absolute top-2 right-2 z-10">
+                      <Badge className="bg-rose-600 text-white shadow-sm border-rose-500">
+                        ⚡ Featured
+                      </Badge>
+                    </div>
+                  )}
                   <div
-                    className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${overlayGradients[index]} opacity-40 group-hover:opacity-60 transition-opacity duration-300`}
+                    className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${overlayGradients[gi]} opacity-40 group-hover:opacity-60 transition-opacity duration-300`}
                   />
                   <CardHeader className="pb-3 relative">
                     <div className="flex items-center justify-between">

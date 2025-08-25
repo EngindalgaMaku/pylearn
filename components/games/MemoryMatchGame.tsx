@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress"
 import { getMatchingConfig, type MatchingConfig, type MatchingPair } from "@/components/activities/matching/matching-banks"
 import { Clock, Play, RotateCcw, Trophy } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import RewardDialog from "@/components/games/RewardDialog"
+import { useGameRewards } from "@/hooks/useGameRewards"
 import GameSEOSection from "@/components/games/GameSEOSection"
 
 export type MemoryMatchProps = {
@@ -50,7 +50,6 @@ function buildCardsFromPairs(pairs: MatchingPair[], limit?: number): CardFace[] 
 }
 
 export default function MemoryMatchGame({ slug = "python-basics-matching", title, timeLimitSec, pairCount = 8 }: MemoryMatchProps) {
-  const { data: session, update } = useSession()
   const cfg: MatchingConfig | null = useMemo(() => getMatchingConfig(slug), [slug])
   const effectiveTitle = title || cfg?.title || "Memory Match"
   const limit = typeof timeLimitSec === "number" && !Number.isNaN(timeLimitSec) ? timeLimitSec : cfg?.timeLimitSec ?? 180
@@ -63,10 +62,7 @@ export default function MemoryMatchGame({ slug = "python-basics-matching", title
   const [phase, setPhase] = useState<"start" | "playing" | "completed">("start")
   const [startAt, setStartAt] = useState<Date | null>(null)
   const [endAt, setEndAt] = useState<Date | null>(null)
-  const [reward, setReward] = useState<{ xp: number; diamonds: number } | null>(null)
-  const [showReward, setShowReward] = useState(false)
-  const [prevXP, setPrevXP] = useState<number | null>(null)
-  const [prevDiamonds, setPrevDiamonds] = useState<number | null>(null)
+  const { reward, showReward, setShowReward, prevXP, prevDiamonds, postSession } = useGameRewards()
 
   // Rebuild when config changes
   useEffect(() => {
@@ -133,51 +129,12 @@ export default function MemoryMatchGame({ slug = "python-basics-matching", title
     setEndAt(ended)
     const durationSec = startAt ? Math.max(0, Math.round((ended.getTime() - startAt.getTime()) / 1000)) : limit - timeLeft
 
-    // Open modal immediately with best-known current totals; server values will replace shortly
-    setPrevXP((session?.user as any)?.experience ?? 0)
-    setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
-    setShowReward(true)
-
-    try {
-      const payload = {
-        gameKey: "memory-match",
-        score: matchedPairs, // simple scoring: number of matched pairs
-        correctCount: matchedPairs,
-        durationSec,
-      }
-      const res = await fetch("/api/games/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json().catch(() => ({}))
-      const xp = data?.rewards?.xp ?? 0
-      const diamonds = data?.rewards?.diamonds ?? 0
-      const beforeXP = data?.totals?.before?.xp
-      const beforeDiamonds = data?.totals?.before?.diamonds
-      const afterXP = data?.totals?.after?.xp
-      const afterDiamonds = data?.totals?.after?.diamonds
-      setReward({ xp, diamonds })
-      if (typeof beforeXP === "number") setPrevXP(beforeXP); else setPrevXP((session?.user as any)?.experience ?? 0)
-      if (typeof beforeDiamonds === "number") setPrevDiamonds(beforeDiamonds); else setPrevDiamonds((session?.user as any)?.currentDiamonds ?? 0)
-      try {
-        if (typeof afterXP === "number" || typeof afterDiamonds === "number") {
-          await update?.({
-            experience: typeof afterXP === "number" ? afterXP : ((session?.user as any)?.experience ?? 0) + xp,
-            currentDiamonds: typeof afterDiamonds === "number" ? afterDiamonds : ((session?.user as any)?.currentDiamonds ?? 0) + diamonds,
-          })
-        } else {
-          const curXP = (session?.user as any)?.experience ?? 0
-          const curDiamonds = (session?.user as any)?.currentDiamonds ?? 0
-          await update?.({ experience: curXP + xp, currentDiamonds: curDiamonds + diamonds })
-        }
-      } catch {
-        // keep modal open even if update fails
-      }
-    } catch {
-      setShowReward(true)
-    }
+    await postSession({
+      gameKey: "memory-match",
+      score: matchedPairs,
+      correctCount: matchedPairs,
+      durationSec,
+    })
   }
 
   function onCardClick(c: CardFace) {
@@ -303,39 +260,15 @@ export default function MemoryMatchGame({ slug = "python-basics-matching", title
         <div className="flex gap-3 justify-center pb-2">
           <Button variant="outline" onClick={resetRun}><RotateCcw className="w-4 h-4 mr-2"/>Try Again</Button>
         </div>
-        {/* Rewards Popup */}
-        <Dialog open={showReward} onOpenChange={setShowReward}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-center text-xl">Rewards Unlocked! 🎉</DialogTitle>
-              <DialogDescription className="text-center">Keep playing to earn more XP and diamonds.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3">
-                <div className="rounded-lg border p-3 bg-primary/5 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2"><span className="text-2xl">⭐</span><span className="font-medium">XP</span></div>
-                    <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevXP ?? (session?.user as any)?.experience ?? 0}</div></div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.xp ?? 0}</span></div>
-                  <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevXP ?? (session?.user as any)?.experience ?? 0) + (reward?.xp ?? 0)}</span></div>
-                </div>
-                <div className="rounded-lg border p-3 bg-secondary/10 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2"><span className="text-2xl">💎</span><span className="font-medium">Diamonds</span></div>
-                    <div className="text-right"><div className="text-sm text-muted-foreground">Before</div><div className="font-semibold">{prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0}</div></div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-center gap-2 text-primary"><span className="text-xs uppercase tracking-wide">+ Gained</span><span className="font-bold">{reward?.diamonds ?? 0}</span></div>
-                  <div className="mt-2 text-center text-sm text-muted-foreground">=<span className="ml-2 font-semibold text-foreground">{(prevDiamonds ?? (session?.user as any)?.currentDiamonds ?? 0) + (reward?.diamonds ?? 0)}</span></div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button className="flex-1" onClick={() => setShowReward(false)}>Keep Playing ▶️</Button>
-                <Link href="/games" className="flex-1"><Button variant="outline" className="w-full">More Games</Button></Link>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <RewardDialog
+          open={showReward}
+          onOpenChange={setShowReward}
+          prevXP={prevXP}
+          prevDiamonds={prevDiamonds}
+          reward={reward}
+          primaryLabel="Keep Playing ▶️"
+          onPrimary={() => setShowReward(false)}
+        />
       </div>
     )
   }
