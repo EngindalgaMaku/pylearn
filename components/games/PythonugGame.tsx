@@ -8,7 +8,7 @@ import RewardDialog from "@/components/games/RewardDialog"
 import CardRevealDialog from "@/components/games/CardRevealDialog"
 import { useGameRewards } from "@/hooks/useGameRewards"
 import Link from "next/link"
-import { ArrowLeft, Volume2, VolumeX } from "lucide-react"
+import { ArrowLeft, Volume2, VolumeX, ListOrdered } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 
@@ -125,6 +125,16 @@ export default function PythonugGame() {
   const [finished, setFinished] = useState(false)
   const [score, setScore] = useState(0)
   const autoFinishedRef = useRef(false)
+  const [mobilePicker, setMobilePicker] = useState<{ open: boolean; line: number | null }>({ open: false, line: null })
+
+  // Light haptic feedback for mobile
+  const haptic = (pattern: number | number[] = 10) => {
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any)?.vibrate) {
+        ;(navigator as any).vibrate(pattern)
+      }
+    } catch {}
+  }
 
   // Sound effects
   const [muted, setMuted] = useState(false)
@@ -432,7 +442,7 @@ export default function PythonugGame() {
         <div className="max-w-3xl mx-auto p-6 pt-10">
           <Card className={`border-0 shadow-lg ${levelTheme.cardGradient}`}>
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 sticky top-0 z-10 bg-white/70 dark:bg-slate-950/40 backdrop-blur supports-[backdrop-filter]:backdrop-blur rounded-md px-2 py-2">
                 <div className="flex items-center gap-3">
                   <div className="px-3 py-1.5 rounded-full text-sm font-bold bg-indigo-600 text-white shadow-md ring-1 ring-indigo-700/40">
                     Question {levelIndex + 1} / {sessionLevels.length}
@@ -455,28 +465,30 @@ export default function PythonugGame() {
                   return (
                     <div
                       key={i}
-                      className={`flex items-center gap-2 px-2 py-1.5 border-b last:border-b-0 ${rowBg}`}
+                      className={`relative flex items-center gap-2 px-2 py-1.5 border-b last:border-b-0 ${rowBg} overflow-x-auto`}
                       onClick={() => setSelectedLine(i)}
                       role="button"
                     >
                       <div className="w-6 shrink-0 text-center text-[11px] text-muted-foreground tabular-nums select-none">{i + 1}</div>
-                      <div className="flex items-center gap-1">
-                        <Button size="sm" variant="outline" onClick={() => changeIndent(i, -1)}>-</Button>
-                        <Button size="sm" onClick={() => changeIndent(i, +1)}>+</Button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button size="sm" variant="outline" className="h-7 w-7 md:h-8 md:w-8" onClick={() => changeIndent(i, -1)}>-</Button>
+                        <Button size="sm" className="h-7 w-7 md:h-8 md:w-8" onClick={() => changeIndent(i, +1)}>+</Button>
+                        {/* Desktop/Large screens: show dropdown */}
+                        <div className="hidden md:block">
                         <Select value={String(indents[i])} onValueChange={(v) => {
-                          const n = Number(v) || 0
-                          setIndents((arr) => {
-                            const next = arr.slice()
-                            const before = next[i]
-                            next[i] = Math.max(0, Math.min(MAX_INDENT, n))
-                            if (next[i] !== before) {
-                              sfx.tick()
-                              if (next[i] === (level?.lines[i]?.targetIndent ?? -1)) sfx.ok()
-                            }
-                            return next
-                          })
-                        }}>
-                          <SelectTrigger size="sm" className="h-8">
+                           const n = Number(v) || 0
+                           setIndents((arr) => {
+                             const next = arr.slice()
+                             const before = next[i]
+                             next[i] = Math.max(0, Math.min(MAX_INDENT, n))
+                             if (next[i] !== before) {
+                               sfx.tick(); haptic(10)
+                               if (next[i] === (level?.lines[i]?.targetIndent ?? -1)) { sfx.ok(); haptic([5,30,10]) }
+                             }
+                             return next
+                           })
+                         }}>
+                          <SelectTrigger size="sm" className="h-8 text-xs md:text-sm w-[120px]">
                             <SelectValue placeholder="Indent" />
                           </SelectTrigger>
                           <SelectContent>
@@ -485,9 +497,25 @@ export default function PythonugGame() {
                             ))}
                           </SelectContent>
                         </Select>
+                        </div>
+                        {/* Mobile: open bottom sheet picker */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 w-7 md:hidden"
+                          aria-label="Choose indent"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMobilePicker({ open: true, line: i })
+                          }}
+                        >
+                          <ListOrdered className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div className="text-xs w-10 text-muted-foreground tabular-nums">{indents[i]}</div>
-                      <pre className="flex-1 overflow-x-auto"><code>{" ".repeat(indents[i] * INDENT_WIDTH) + line.text}</code></pre>
+                      <div className="text-xs w-8 md:w-10 text-muted-foreground tabular-nums shrink-0 text-center">{indents[i]}</div>
+                      <pre className="flex-1 overflow-x-auto min-w-0 text-slate-900 dark:text-slate-100 text-sm md:text-base"><code>{" ".repeat(indents[i] * INDENT_WIDTH) + line.text}</code></pre>
+                      {/* Right-edge gradient hint on mobile to indicate horizontal scroll */}
+                      <div className="pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white/80 dark:from-slate-900/80 to-transparent md:hidden" />
                       <div className={`w-2 h-2 rounded-full ${ok ? "bg-emerald-500" : "bg-gray-300"}`} aria-label={ok ? "correct" : "incorrect"} />
                       <div className={`text-[11px] ml-2 ${ok ? "text-emerald-600" : "text-muted-foreground"}`}>{ok ? "Correct" : "Fix"}</div>
                     </div>
@@ -502,6 +530,47 @@ export default function PythonugGame() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Mobile bottom-sheet indent picker */}
+      {mobilePicker.open && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 md:hidden z-40"
+            onClick={() => setMobilePicker({ open: false, line: null })}
+          />
+          <div className="fixed inset-x-0 bottom-0 md:hidden z-50 rounded-t-2xl bg-white dark:bg-slate-900 shadow-2xl border-t">
+            <div className="p-3 flex items-center justify-between">
+              <div className="text-sm font-medium">Choose indentation</div>
+              <Button variant="ghost" size="sm" onClick={() => setMobilePicker({ open: false, line: null })}>Close</Button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 p-3">
+              {[...Array(MAX_INDENT + 1)].map((_, val) => (
+                <Button
+                  key={val}
+                  variant={(indents[mobilePicker.line ?? 0] === val) ? "default" : "outline"}
+                  className="py-4"
+                  onClick={() => {
+                    const line = mobilePicker.line ?? 0
+                    setIndents((arr) => {
+                      const next = arr.slice()
+                      const before = next[line]
+                      next[line] = Math.max(0, Math.min(MAX_INDENT, val))
+                      if (next[line] !== before) {
+                        sfx.tick()
+                        if (next[line] === (level?.lines[line]?.targetIndent ?? -1)) sfx.ok()
+                      }
+                      return next
+                    })
+                    setMobilePicker({ open: false, line: null })
+                  }}
+                >
+                  {val}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Rewards modal (XP/diamonds) */}

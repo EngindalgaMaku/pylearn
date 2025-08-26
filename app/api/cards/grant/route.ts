@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     // 1) Choose a rarity bucket
     const chosenRarity = pickWeighted(DEFAULT_WEIGHTS);
 
-    // 2) Try to find a card matching rarity and category that the user doesn't own yet
+    // 2) Build owned set to EXCLUDE user's cards from selection
     const owned = await prisma.userCard.findMany({
       where: { userId },
       select: { cardId: true },
@@ -96,27 +96,47 @@ export async function POST(req: Request) {
     };
     const mappedCats = categoryMappings[category] || [category];
 
-    // First try unowned cards matching rarity
-    let candidate = await prisma.card.findFirst({
-      where: {
-        category: { in: mappedCats },
-        rarity: { equals: chosenRarity, mode: "insensitive" as any },
-        isPublic: true,
-        isPurchasable: true,
-      } as any,
-      orderBy: [{ uploadDate: "desc" as const }, { id: "desc" as const }],
-      skip: 0,
+    // Helper: pick a random card with a given where filter, excluding owned
+    async function pickRandom(where: any) {
+      const whereExcluding = {
+        ...where,
+        id: { notIn: Array.from(ownedIds) },
+      } as any;
+      const total = await prisma.card.count({ where: whereExcluding } as any);
+      if (total <= 0) return null;
+      const skip = Math.floor(Math.random() * total);
+      const rows = await prisma.card.findMany({
+        where: whereExcluding,
+        orderBy: { id: "asc" },
+        skip,
+        take: 1,
+      } as any);
+      return rows[0] || null;
+    }
+
+    // First try: unowned cards in category with the chosen rarity
+    let candidate = await pickRandom({
+      category: { in: mappedCats },
+      rarity: { equals: chosenRarity, mode: "insensitive" as any },
+      isPublic: true,
+      isPurchasable: true,
     });
 
-    // If user owns it or none found, broaden search: different rarity or any
-    if (!candidate || ownedIds.has(candidate.id)) {
-      candidate = await prisma.card.findFirst({
-        where: {
-          category: { in: mappedCats },
-          isPublic: true,
-        } as any,
-        orderBy: [{ uploadDate: "desc" as const }, { id: "desc" as const }],
+    // Fallback: any unowned public card in the category
+    if (!candidate) {
+      candidate = await pickRandom({
+        category: { in: mappedCats },
+        isPublic: true,
+        isPurchasable: true,
       });
+    }
+
+    // Still nothing? The user owns all available cards in this category
+    if (!candidate) {
+      return NextResponse.json(
+        { error: "No new cards available in this category. You already own them all." },
+        { status: 409 }
+      );
     }
 
     if (!candidate) {
