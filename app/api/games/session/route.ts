@@ -4,6 +4,34 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { updateChallengesProgressForEvent } from "@/lib/challengeProgress"
 
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const gameKey = searchParams.get("gameKey") || "pythonug"
+    const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 10)))
+
+    const anyPrisma = prisma as any
+    if (!anyPrisma?.gameSession) {
+      return NextResponse.json(
+        { error: "GameSession model not available yet. Run Prisma migrate and generate.", hint: "npx prisma migrate dev && npx prisma generate" },
+        { status: 503 }
+      )
+    }
+
+    const sessions = await anyPrisma.gameSession.findMany({
+      where: { gameKey },
+      orderBy: [{ score: "desc" }, { createdAt: "asc" }],
+      take: limit,
+      include: { user: { select: { username: true, avatar: true } } },
+    })
+
+    return NextResponse.json({ items: sessions })
+  } catch (e: any) {
+    console.error("/api/games/session GET error:", e)
+    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = (await getServerSession(authOptions as any)) as any

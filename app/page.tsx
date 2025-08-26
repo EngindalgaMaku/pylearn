@@ -7,6 +7,7 @@ import Script from "next/script"
 import HomeClient from "@/components/home/HomeClient"
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth/next"
+import type { Session } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
 type ActivityItem = {
@@ -100,13 +101,19 @@ async function getJson<T>(url: string): Promise<T | null> {
 
 export default async function Page() {
   // Seed auth on SSR to avoid client "loading" flashes for bots
-  const session = await getServerSession(authOptions)
+  let session: Session | null = null
+  try {
+    session = await getServerSession(authOptions)
+  } catch (e) {
+    console.warn("getServerSession failed, treating as unauthenticated (likely due to invalid/old JWT or missing NEXTAUTH_SECRET)", e)
+    session = null
+  }
   const initialAuth = session?.user
     ? {
         status: "authenticated" as const,
         user: {
           name: (session.user as any)?.name ?? undefined,
-          email: session.user.email ?? undefined,
+          email: (session.user as any)?.email ?? undefined,
           username: (session.user as any)?.username ?? undefined,
           experience: (session.user as any)?.experience ?? 0,
           currentDiamonds: (session.user as any)?.currentDiamonds ?? 0,

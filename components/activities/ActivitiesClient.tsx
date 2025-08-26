@@ -38,6 +38,7 @@ import {
   LineChart,
   MonitorPlay,
   HelpCircle,
+  ArrowLeft,
 } from "lucide-react";
 
 export type ActivityDTO = {
@@ -349,10 +350,20 @@ export default function ActivitiesClient({
         <MobilePageHeader
           title="Learning Activities"
           subtitle="Master Python through interactive challenges"
+          backHref="/games"
         />
       </div>
 
       <div className="max-w-4xl mx-auto lg:max-w-6xl xl:max-w-7xl px-4 py-6 md:px-6 md:py-8 lg:px-8">
+        {/* Desktop back to games */}
+        <div className="hidden md:block mb-4">
+          <Link href="/games">
+            <Button variant="ghost" size="sm" aria-label="Back to games">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Games
+            </Button>
+          </Link>
+        </div>
         <div className="mb-8 md:mb-12">
           <div className="hidden md:block text-center mb-8">
             <h1 className="font-serif font-black text-4xl md:text-5xl lg:text-6xl text-foreground mb-4">

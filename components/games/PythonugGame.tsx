@@ -8,7 +8,9 @@ import RewardDialog from "@/components/games/RewardDialog"
 import CardRevealDialog from "@/components/games/CardRevealDialog"
 import { useGameRewards } from "@/hooks/useGameRewards"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Volume2, VolumeX } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
 
 type IndentationLine = {
   text: string
@@ -124,15 +126,116 @@ export default function PythonugGame() {
   const [score, setScore] = useState(0)
   const autoFinishedRef = useRef(false)
 
+  // Sound effects
+  const [muted, setMuted] = useState(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const lastPlayRef = useRef<number>(0)
+  const ensureCtx = () => {
+    if (!audioCtxRef.current && typeof window !== "undefined") {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext
+      if (Ctx) audioCtxRef.current = new Ctx()
+    }
+    return audioCtxRef.current
+  }
+  const playTone = (freq: number, durationMs = 120, type: OscillatorType = "sine", gain = 0.04) => {
+    if (muted) return
+    const now = Date.now()
+    if (now - lastPlayRef.current < 25) return // throttle
+    lastPlayRef.current = now
+    const ctx = ensureCtx()
+    if (!ctx) return
+    const o = ctx.createOscillator()
+    const g = ctx.createGain()
+    o.type = type
+    o.frequency.value = freq
+    g.gain.value = gain
+    o.connect(g)
+    g.connect(ctx.destination)
+    const t = ctx.currentTime
+    g.gain.setValueAtTime(gain, t)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + durationMs / 1000)
+    o.start(t)
+    o.stop(t + durationMs / 1000)
+  }
+  const sfx = {
+    tick: () => playTone(420, 70, "triangle", 0.03),
+    tock: () => playTone(320, 70, "triangle", 0.03),
+    ok: () => { playTone(660, 90, "sine", 0.04); setTimeout(() => playTone(880, 120, "sine", 0.035), 80) },
+    finish: () => { playTone(523.25, 120, "sine", 0.05); setTimeout(() => playTone(659.25, 140, "sine", 0.05), 120); setTimeout(() => playTone(783.99, 180, "sine", 0.05), 260) },
+  }
+
   const { postSession, reward, showReward, setShowReward, prevXP, prevDiamonds, grantedCard, showCardReveal, setShowCardReveal, grantCardReward } = useGameRewards()
+  const { toast } = useToast()
 
   const level = started ? sessionLevels[levelIndex] : undefined as unknown as Level
+
+  // Per-level color themes: card gradient + row palette
+  const levelTheme = useMemo(() => {
+    const themes = [
+      {
+        card: "bg-gradient-to-br from-amber-50 via-rose-50 to-emerald-50 dark:from-slate-900 dark:via-slate-950 dark:to-violet-950",
+        rows: [
+          "bg-rose-50/70 dark:bg-rose-950/30",
+          "bg-amber-50/70 dark:bg-amber-950/30",
+          "bg-emerald-50/70 dark:bg-emerald-950/30",
+          "bg-sky-50/70 dark:bg-sky-950/30",
+          "bg-violet-50/70 dark:bg-violet-950/30",
+        ],
+      },
+      {
+        card: "bg-gradient-to-br from-sky-50 via-indigo-50 to-fuchsia-50 dark:from-slate-900 dark:via-indigo-950 dark:to-fuchsia-950",
+        rows: [
+          "bg-sky-50/70 dark:bg-sky-950/30",
+          "bg-indigo-50/70 dark:bg-indigo-950/30",
+          "bg-fuchsia-50/70 dark:bg-fuchsia-950/30",
+          "bg-cyan-50/70 dark:bg-cyan-950/30",
+          "bg-purple-50/70 dark:bg-purple-950/30",
+        ],
+      },
+      {
+        card: "bg-gradient-to-br from-emerald-50 via-teal-50 to-lime-50 dark:from-emerald-950 dark:via-teal-950 dark:to-lime-950",
+        rows: [
+          "bg-emerald-50/70 dark:bg-emerald-950/30",
+          "bg-teal-50/70 dark:bg-teal-950/30",
+          "bg-lime-50/70 dark:bg-lime-950/30",
+          "bg-green-50/70 dark:bg-green-950/30",
+          "bg-rose-50/70 dark:bg-rose-950/30",
+        ],
+      },
+      {
+        card: "bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950 dark:via-orange-950 dark:to-yellow-950",
+        rows: [
+          "bg-amber-50/70 dark:bg-amber-950/30",
+          "bg-orange-50/70 dark:bg-orange-950/30",
+          "bg-yellow-50/70 dark:bg-yellow-950/30",
+          "bg-stone-50/70 dark:bg-stone-950/30",
+          "bg-emerald-50/70 dark:bg-emerald-950/30",
+        ],
+      },
+    ] as const
+    const t = themes[levelIndex % themes.length]
+    return { cardGradient: t.card, rowPalette: t.rows }
+  }, [levelIndex])
 
   useEffect(() => {
     if (!started) return
     const cur = sessionLevels[levelIndex]
     if (cur) setIndents(cur.scrambled.slice())
   }, [levelIndex, started, sessionLevels])
+
+  // Persist mute in localStorage
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("pythonugMuted")
+      if (v != null) setMuted(v === "1")
+    } catch {}
+    // resume audio context on first user gesture (handled by playTone)
+  }, [])
+  useEffect(() => {
+    try {
+      localStorage.setItem("pythonugMuted", muted ? "1" : "0")
+    } catch {}
+  }, [muted])
 
   // Featured random anime cards for start screen
   type FeaturedCard = { id: string; name: string; img: string }
@@ -171,9 +274,12 @@ export default function PythonugGame() {
       setTimeout(() => {
         if (levelIndex + 1 < sessionLevels.length) {
           setScore((s) => s + level.lines.length)
+          toast({ title: "Level complete!", description: `Great job. Moving to level ${levelIndex + 2}/${sessionLevels.length}.` })
           setLevelIndex((i) => i + 1)
           autoFinishedRef.current = false
+          sfx.ok()
         } else {
+          sfx.finish()
           onFinish()
         }
       }, 600)
@@ -183,7 +289,9 @@ export default function PythonugGame() {
   const changeIndent = (i: number, delta: number) => {
     setIndents((arr) => {
       const next = arr.slice()
+      const before = next[i]
       next[i] = Math.max(0, Math.min(MAX_INDENT, next[i] + delta))
+      if (next[i] !== before) (delta > 0 ? sfx.tick : sfx.tock)()
       return next
     })
   }
@@ -222,6 +330,7 @@ export default function PythonugGame() {
     setScore(0)
     setFinished(false)
     setStarted(true)
+    sfx.tick()
   }
 
   const onFinish = async () => {
@@ -230,19 +339,38 @@ export default function PythonugGame() {
     const totalScore = score + level.lines.length // count last level
     await postSession({ gameKey: "pythonug", score: totalScore, correctCount: totalScore, durationSec: sessionLevels.length * 30 })
     grantCardReward({ category: "anime-collection", sourceGame: "pythonug" })
+    // Refresh leaderboard after post
+    fetchLeaderboard()
+    toast({ title: "Pythonüg complete!", description: `Score: ${totalScore}. Rewards applied.` })
   }
 
+  // Leaderboard
+  type LBItem = { id: string; score: number; createdAt: string; user?: { username?: string | null; avatar?: string | null } }
+  const [leaderboard, setLeaderboard] = useState<LBItem[]>([])
+  const fetchLeaderboard = async () => {
+    try {
+      const res = await fetch(`/api/games/session?gameKey=pythonug&limit=10`, { cache: "no-store" })
+      if (!res.ok) return
+      const data = await res.json().catch(() => ({} as any))
+      setLeaderboard(Array.isArray(data?.items) ? data.items : [])
+    } catch {}
+  }
+  useEffect(() => { fetchLeaderboard() }, [])
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-card">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50 to-rose-50 dark:from-slate-950 dark:via-slate-950 dark:to-violet-950">
       {/* Back header consistent with other games */}
       <header className="bg-card border-b border-border px-4 py-6">
-        <div className="max-w-3xl mx-auto flex items-center gap-3">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
           <Link href="/games">
             <Button variant="ghost" size="sm" aria-label="Back to games">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
           <h1 className="text-xl font-bold font-[family-name:var(--font-work-sans)]">Pythonüg</h1>
+          <Button variant="ghost" size="sm" aria-label={muted ? "Unmute" : "Mute"} onClick={() => setMuted((m) => !m)}>
+            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </Button>
         </div>
       </header>
       {!started ? (
@@ -278,45 +406,90 @@ export default function PythonugGame() {
             </div>
           )}
 
-          <div>
+          <div className="space-y-6">
+            {leaderboard.length > 0 && (
+              <div className="mx-auto max-w-md text-left">
+                <div className="text-sm font-medium mb-2">Top Pythonüg Scores</div>
+                <div className="rounded-md border divide-y">
+                  {leaderboard.map((r, idx) => (
+                    <div key={r.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 text-muted-foreground tabular-nums">{idx + 1}.</div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={r.user?.avatar || "/brand-snake.svg"} alt="avatar" className="w-6 h-6 rounded-full object-cover" />
+                        <div className="truncate">{r.user?.username || "Anonymous"}</div>
+                      </div>
+                      <div className="font-mono">{r.score}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <Button size="lg" onClick={onStart}>Start</Button>
           </div>
         </div>
       ) : (
         <div className="max-w-3xl mx-auto p-6 pt-10">
-          <Card>
+          <Card className={`border-0 shadow-lg ${levelTheme.cardGradient}`}>
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <span>Level {levelIndex + 1} / {sessionLevels.length}</span>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="px-3 py-1.5 rounded-full text-sm font-bold bg-indigo-600 text-white shadow-md ring-1 ring-indigo-700/40">
+                    Question {levelIndex + 1} / {sessionLevels.length}
+                  </div>
                   {(() => {
                     const d = difficultyForIndex(levelIndex, sessionLevels.length)
                     return <Badge variant={d.variant}>{d.label}</Badge>
                   })()}
                 </div>
-                <div>Correct lines: {correctCount} / {level.lines.length}</div>
+                <div className="text-sm text-muted-foreground">Correct lines: {correctCount} / {level.lines.length}</div>
               </div>
               {level.description && (
                 <div className="mb-4 text-sm text-muted-foreground">{level.description}</div>
               )}
-              <div className="rounded-md border bg-card">
+              <div className="rounded-md border bg-white/70 dark:bg-slate-900/50">
                 {level.lines.map((line, i) => {
                   const active = selectedLine === i
                   const ok = indents[i] === line.targetIndent
+                  const rowBg = active ? "bg-muted/40" : levelTheme.rowPalette[i % levelTheme.rowPalette.length]
                   return (
                     <div
                       key={i}
-                      className={`flex items-center gap-2 px-2 py-1.5 border-b last:border-b-0 ${active ? "bg-muted/40" : ""}`}
+                      className={`flex items-center gap-2 px-2 py-1.5 border-b last:border-b-0 ${rowBg}`}
                       onClick={() => setSelectedLine(i)}
                       role="button"
                     >
+                      <div className="w-6 shrink-0 text-center text-[11px] text-muted-foreground tabular-nums select-none">{i + 1}</div>
                       <div className="flex items-center gap-1">
                         <Button size="sm" variant="outline" onClick={() => changeIndent(i, -1)}>-</Button>
                         <Button size="sm" onClick={() => changeIndent(i, +1)}>+</Button>
+                        <Select value={String(indents[i])} onValueChange={(v) => {
+                          const n = Number(v) || 0
+                          setIndents((arr) => {
+                            const next = arr.slice()
+                            const before = next[i]
+                            next[i] = Math.max(0, Math.min(MAX_INDENT, n))
+                            if (next[i] !== before) {
+                              sfx.tick()
+                              if (next[i] === (level?.lines[i]?.targetIndent ?? -1)) sfx.ok()
+                            }
+                            return next
+                          })
+                        }}>
+                          <SelectTrigger size="sm" className="h-8">
+                            <SelectValue placeholder="Indent" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[...Array(MAX_INDENT + 1)].map((_, val) => (
+                              <SelectItem key={val} value={String(val)}>{val} indent{val === 1 ? "" : "s"}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="text-xs w-10 text-muted-foreground tabular-nums">{indents[i]}</div>
                       <pre className="flex-1 overflow-x-auto"><code>{" ".repeat(indents[i] * INDENT_WIDTH) + line.text}</code></pre>
                       <div className={`w-2 h-2 rounded-full ${ok ? "bg-emerald-500" : "bg-gray-300"}`} aria-label={ok ? "correct" : "incorrect"} />
+                      <div className={`text-[11px] ml-2 ${ok ? "text-emerald-600" : "text-muted-foreground"}`}>{ok ? "Correct" : "Fix"}</div>
                     </div>
                   )
                 })}
